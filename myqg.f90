@@ -11,9 +11,7 @@ program main
   integer :: nt
 
   nx = 100
-  nx = 10
-  ny = 80
-  ny = 5
+  ny = 100
   nz = 2
   path_data = "/scratch/uni/ifmto/u241161/myqg/test/"
 
@@ -24,12 +22,14 @@ program main
   dz = (/ 50., 50. /)
 
   nt = 1000
-  dt = 1.e2
+  dt = 1.e3
   tstep = 0
   t_start = dt * tstep
   time    = t_start
   t_end   = dt * nt
-  timeio  = t_end / 10. 
+  timeio  = t_end / 40. 
+
+  diffPVh = 0.1 * dx**2/dt/4.0
 
   do i=1,nx
     xu(i) = dx*(i-1)
@@ -59,13 +59,15 @@ program main
   Lx = nx*dx
   Ly = ny*dy
 
-  do i=1-ox,nx+ox
-    do j=1-ox,ny+ox
-      do k=1,nz
+  do k=1,nz
+    do i=1-ox,nx+ox
+      do j=1-ox,ny+ox
         !u(i,j,k) = sin(4*xu(i)/Lx*2*pi)*cos(yu(j)/Ly*2*pi)
         !u(i,j,k) = (xu(i)/Lx)**2 + (yu(j)/Ly)**2 
         !u(i,j,k) = i*j*k
-        u(i,j,k) = 1.
+        !u(i,j,k) = 1.
+        !v(i,j,k) = 1.
+        psi(i,j,k) = - dy*j + dx*i
       enddo
     enddo
   enddo
@@ -75,19 +77,19 @@ program main
   do i=1-ox,nx+ox
     do j=1-ox,ny+ox
       do k=1,nz
-        pv(i,j,k) = exp(-( ((xt(i)-Lx/2.)/Lx)**2 + ((yt(j)-Ly/2.)/Ly)**2 ))
-        pv(i,j,k) = j*nx + i
+        pv(i,j,k) = exp(-( ((xt(i)-Lx/2.)/(0.1*Lx))**2 + ((yt(j)-Ly/2.)/(0.1*Ly))**2 ))
+        !pv(i,j,k) = j*nx + i
       enddo
     enddo
   enddo
 
-  write(*,*) sngl(pv(:,1,1))
-  call cyclic_exchange(pv)
-  write(*,*) "start"
-  do j=1-ox,ny+ox
-    write(*,*) sngl(pv(:,j,1))
-  enddo
-  stop
+!  write(*,*) sngl(pv(:,1,1))
+!  call cyclic_exchange(pv)
+!  write(*,*) "start"
+!  do j=1-ox,ny+ox
+!    write(*,*) sngl(pv(:,j,1))
+!  enddo
+!  stop
 
   write(*,*) "Finished: Initialize variables"
 
@@ -107,6 +109,11 @@ program main
     tstep = tstep + 1
     time  = tstep*dt
 
+    ! calculate velocity
+    call calc_curl_psi
+    call cyclic_exchange(u)
+    call cyclic_exchange(v)
+
     ! calculate tendencies
     call calc_Gpv
 
@@ -121,17 +128,16 @@ program main
     Gpv = 0.0
 
     ! do cyclic_exchange (Does this occur at correct place???)
-    !call cyclic_exchange(u)
-    !call cyclic_exchange(v)
     !call cyclic_exchange(psi)
     call cyclic_exchange(pv)
 
     ! do model I/O
     if ( floor(time/timeio) == time/timeio ) then
       write(*,*) "Model I/O at tstep ", tstep
-      call write_3d('pv        ', pv(1:nx,1:ny,1:nz), (/ nx, ny, nz /), tstep, path_data)
-      call write_3d('u         ', u (1:nx,1:ny,1:nz), (/ nx, ny, nz /), tstep, path_data)
-      call write_3d('v         ', v (1:nx,1:ny,1:nz), (/ nx, ny, nz /), tstep, path_data)
+      call write_3d('pv        ', pv (1:nx,1:ny,1:nz), (/ nx, ny, nz /), tstep, path_data)
+      call write_3d('psi       ', psi(1:nx,1:ny,1:nz), (/ nx, ny, nz /), tstep, path_data)
+      call write_3d('u         ', u  (1:nx,1:ny,1:nz), (/ nx, ny, nz /), tstep, path_data)
+      call write_3d('v         ', v  (1:nx,1:ny,1:nz), (/ nx, ny, nz /), tstep, path_data)
     endif
 
   enddo
@@ -147,10 +153,72 @@ subroutine calc_Gpv
 !INPUT PARAMETERS:  ======================================== 
 !OUTPUT PARAMETERS: ======================================== 
 !LOCAL VARIABLES:   ======================================== 
-
   !Gpv = -pv/t_end
   call calc_pvadv
+  !call calc_pvdiff
 end subroutine calc_Gpv
+
+subroutine calc_curl_psi
+  use myqg_module
+  implicit none
+!INPUT PARAMETERS:  ======================================== 
+!OUTPUT PARAMETERS: ======================================== 
+!LOCAL VARIABLES:   ======================================== 
+  integer :: i,j,k
+  do i=1-ox,nx+ox-1
+    do j=1-ox,ny+ox
+      do k=1,nz
+        u(i,j,k) = - (psi(i,j+1,k)-psi(i,j,k)) / dy
+      enddo
+    enddo
+  enddo
+  do i=1-ox,nx+ox
+    do j=1-ox,ny+ox-1
+      do k=1,nz
+        v(i,j,k) =   (psi(i+1,j,k)-psi(i,j,k)) / dx
+      enddo
+    enddo
+  enddo
+end subroutine calc_curl_psi
+
+subroutine calc_pvdiff
+  use myqg_module
+  implicit none
+!INPUT PARAMETERS:  ======================================== 
+!OUTPUT PARAMETERS: ======================================== 
+!LOCAL VARIABLES:   ======================================== 
+  integer :: i,j,k
+  real*8, dimension(1-ox:nx+ox,1-ox:ny+ox,nz) :: fZon
+  real*8, dimension(1-ox:nx+ox,1-ox:ny+ox,nz) :: fMer
+
+  do i=1-ox,nx+ox-1
+    do j=1-ox,ny+ox
+      do k=1,nz
+        fZon(i,j,k) = -diffPVh * (pv(i+1,j,k)-pv(i,j,k))/dx * dy*dz(k)
+      enddo
+    enddo
+  enddo
+
+  do i=1-ox,nx+ox
+    do j=1-ox,ny+ox-1
+      do k=1,nz
+        fMer(i,j,k) = -diffPVh * (pv(i,j+1,k)-pv(i,j,k))/dy * dx*dz(k)
+      enddo
+    enddo
+  enddo
+
+  ! diffusive tendency
+  do i=1,nx
+    do j=1,ny
+      do k=1,nz
+        Gpv(i,j,k)  = Gpv(i,j,k) -  recepvol(i,j,k) * ( &
+                    & fZon(i,j,k) - fZon(i-1,j,k) + &
+                    & fMer(i,j,k) - fMer(i,j-1,k)   &
+                    & )
+      enddo
+    enddo
+  enddo
+end subroutine calc_pvdiff
 
 subroutine calc_pvadv
   use myqg_module
@@ -208,13 +276,12 @@ subroutine calc_pvadv
     do j=1,ny
       do k=1,nz
         Gpv(i,j,k)  = Gpv(i,j,k) -  recepvol(i,j,k) * ( &
-                    & fZon(i+1,j,k) - fZon(i,j,k) + &
-                    & fMer(i,j+1,k) - fMer(i,j,k)   &
+                    & fZon(i,j,k) - fZon(i-1,j,k) + &
+                    & fMer(i,j,k) - fMer(i,j-1,k)   &
                     & )
       enddo
     enddo
   enddo
-  
 end subroutine calc_pvadv
 
 subroutine cyclic_exchange(var)

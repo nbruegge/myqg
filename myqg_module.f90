@@ -59,6 +59,12 @@ module myqg_module
   integer           :: bytes  = 4
   integer           :: fid    = 25
 
+! model parameters
+  real*8, allocatable, dimension(:)       :: fCort, fCoru
+  real*8 :: f0
+  real*8 :: beta
+  real*8 :: diffPVh 
+
 end module myqg_module
 
 subroutine allocate_myqg_module
@@ -72,6 +78,7 @@ subroutine allocate_myqg_module
   allocate( yt(ny), yu(ny) ); yt=0; yu=0
   allocate( zt(nz), zu(nz) ); zt=0; zu=0
   allocate( dz(nz) ); dz=0
+  allocate( fCort(ny), fCoru(ny) ); fCort=0; fCort=0
 
   allocate( recepvol(1:nx,1:ny,1:nz) ); recepvol=0
 
