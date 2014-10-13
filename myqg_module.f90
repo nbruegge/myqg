@@ -53,6 +53,9 @@ module myqg_module
   real*8, allocatable, dimension(:,:,:)   :: Gpvm1
   real*8, allocatable, dimension(:,:,:)   :: Gpt
   real*8, allocatable, dimension(:,:,:)   :: Gptm1
+
+! forcing for poisson equation
+  real*8, allocatable, dimension(:,:,:)   :: forc 
  
 ! parameters for I/O
   character(len=24) :: endian = "big_endian"
@@ -90,5 +93,6 @@ subroutine allocate_myqg_module
   !allocate( Gpv(1-ox:nx+ox,1-ox:ny+ox,nz), Gpvm1(1-ox:nx+ox,1-ox:ny+ox,nz) ); Gpv=0; Gpvm1=0
   allocate( Gpv(nx,ny,nz), Gpvm1(nx,ny,nz) ); Gpv=0; Gpvm1=0
   allocate( Gpt(1-ox:nx+ox,1-ox:ny+ox,nz), Gptm1(1-ox:nx+ox,1-ox:ny+ox,nz) ); Gpt=0; Gptm1=0
+  allocate( forc(1-ox:nx+ox,1-ox:ny+ox,nz) ); forc=0
 
 end subroutine allocate_myqg_module

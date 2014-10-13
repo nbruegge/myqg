@@ -9,17 +9,18 @@ program main
   character(len=128) :: path_data
   integer, dimension(3) :: dims
   integer :: nt
+  real*8 :: d,r
 
-  nx = 100
-  ny = 100
+  nx = 120
+  ny = 120
   nz = 2
   path_data = "/scratch/uni/ifmto/u241161/myqg/test/"
 
   call allocate_myqg_module
 
-  dx = 10e3
-  dy = 10e3
-  dz = (/ 50., 50. /)
+  dx = 1.0
+  dy = 1.0
+  dz = (/ 50.d0, 50.d0 /)
 
   nt = 1000
   dt = 1.e3
@@ -74,10 +75,25 @@ program main
   !fprfx = "test"
   !call write_3d(fprfx, u)
 
+  f0 = 1e-7
+  beta = 0.0
+  do j=1,ny
+    fCoru = f0 + beta*yu(j)
+    fCort = f0 + beta*yt(j)
+  enddo
+  fCoru=0.0
+
   do i=1-ox,nx+ox
     do j=1-ox,ny+ox
       do k=1,nz
-        pv(i,j,k) = exp(-( ((xt(i)-Lx/2.)/(0.1*Lx))**2 + ((yt(j)-Ly/2.)/(0.1*Ly))**2 ))
+        !pv(i,j,k) = exp(-( ((xt(i)-Lx/2.)/(0.1*Lx))**2 + ((yt(j)-Ly/2.)/(0.1*Ly))**2 ))
+        !pv(i,j,k) = (2*pi)**2*(-1/Lx**2-1/Ly**2) * sin(xu(i)/Lx*2*pi)*cos(yu(j)/Ly*2*pi)
+        d = 0.1*Lx
+        r = ( (xu(i)-Lx/2.)**2 + (yu(j)-Ly/2.)**2 )**0.5
+        !pv(i,j,k) = 1.0 / ( (r/d) + 0.1 )
+        ! pv(i,j,k) = 2/d**2* ( 2*r**2/d**2 - 1) * exp(-  r**2/d**2  )
+        pv(i,j,k) = exp(- r/d)
+        forc(i,j,k) = pv(i,j,k) - fCoru(j)
         !pv(i,j,k) = j*nx + i
       enddo
     enddo
@@ -90,9 +106,7 @@ program main
 !    write(*,*) sngl(pv(:,j,1))
 !  enddo
 !  stop
-
   write(*,*) "Finished: Initialize variables"
-
 
   ! write grid data out
   call write_3d("XC        ", xt, (/ nx,  1,  1 /), -1, path_data)
@@ -102,6 +116,15 @@ program main
   call write_3d("YG        ", yu, (/  1, ny,  1 /), -1, path_data)
   !call write_3d("RF        ", zu, (/  1,  1, nz /), -1, path_data)
   call write_3d("RF        ", (/ zu(:), 0.d0 /), (/  1,  1, nz+1 /), -1, path_data)
+
+  call cyclic_exchange(pv)
+  call cyclic_exchange(forc)
+  do k=1,1!nz
+    call solve_poisson_cg(1-ox,nx+ox,1-ox,ny+ox,dx,dy,forc(:,:,k),psi(:,:,k),100,0.1d0)
+  enddo
+  call write_3d("psi       ", psi(1:nx,1:ny,1:nz), (/ nx,  ny,  nz /), 10, path_data)
+  call write_3d("pv        ", pv (1:nx,1:ny,1:nz),  (/ nx,  ny,  nz /), 10, path_data)
+  stop
 
   ! main time stepping loop
   write(*,*) "Start: Time stepping"
@@ -292,7 +315,6 @@ subroutine cyclic_exchange(var)
 !LOCAL VARIABLES:   ======================================== 
   integer :: i,j,k
   real*8, dimension(1-ox:nx+ox,1-ox:ny+ox,nz), intent(inout) :: var
-
   if ( cyclic_x .and. cyclic_y ) then
     do i=1,ox
       do j=1,ny
@@ -318,6 +340,40 @@ subroutine cyclic_exchange(var)
     call myqg_error("Both, cyclic_x and cyclic_y, have to be enabled so far")
   endif
 end subroutine cyclic_exchange
+
+subroutine cyclic_exchange_2d(var)
+  use myqg_module
+  implicit none
+!INPUT PARAMETERS:  ======================================== 
+!OUTPUT PARAMETERS: ======================================== 
+!LOCAL VARIABLES:   ======================================== 
+  integer :: i,j
+  real*8, dimension(1-ox:nx+ox,1-ox:ny+ox), intent(inout) :: var
+  if ( cyclic_x .and. cyclic_y ) then
+    do i=1,ox
+      do j=1,ny
+        var(1-i,j)   = var(nx+1-i,j)
+        var(nx+i,j)  = var(i,j)
+      enddo
+    enddo
+    do i=1,nx
+      do j=1,ox
+        var(i,1-j)   = var(i,ny+1-j)
+        var(i,ny+j)  = var(i,j)
+      enddo
+    enddo
+    do i=1,ox
+      do j=1,ox
+        var(1-i, 1-j)  = var(nx+1-i,ny+1-j)
+        var(1-i, ny+j) = var(nx+1-i,j)
+        var(nx+i,1-j)  = var(i,ny+1-j)
+        var(nx+i,ny+j) = var(i,j)
+      enddo
+    enddo
+  else
+    call myqg_error("Both, cyclic_x and cyclic_y, have to be enabled so far")
+  endif
+end subroutine cyclic_exchange_2d
 
 subroutine write_3d(fprfx, outdata, dims, tstepout, path_data)
   use myqg_module
