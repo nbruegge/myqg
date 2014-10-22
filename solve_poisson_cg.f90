@@ -1,6 +1,6 @@
 
 
-subroutine solve_poisson_cg(is,ie,js,je,dx,dy,forc,sol,max_itt,crit)
+subroutine solve_poisson_cg(is,ie,js,je,dx,dy,forc,sol,max_itt,crit, est_error)
   !use myqg_module
   implicit none
 !INPUT PARAMETERS:  ======================================== 
@@ -9,105 +9,208 @@ subroutine solve_poisson_cg(is,ie,js,je,dx,dy,forc,sol,max_itt,crit)
   real*8, dimension(is:ie,js:je), intent(in)  :: forc
   integer, intent(in)                         :: max_itt       
   real*8, intent(in)                          :: crit
+!UPDATE PARAMETERS: ======================================== 
+  real*8, dimension(is:ie,js:je), intent(inout) :: sol
 !OUTPUT PARAMETERS: ======================================== 
-  real*8, dimension(is:ie,js:je), intent(out) :: sol
+  real*8, intent(out)                         :: est_error
 !LOCAL VARIABLES:   ======================================== 
   integer                                     :: i,j,k,n
   !real*8, dimension(is:ie,js:je,3,3)          :: A
   real*8, dimension(3,3)                      :: A
-  real*8, dimension(is:ie,js:je)              :: res, d, z
+  real*8, dimension(is:ie,js:je)              :: res, d, z, h
   logical, save                               :: first=.true.
   real*8                                      :: alpha, beta
-  real*8                                      :: resTres, resnTresn, dTz
-  real*8, dimension(is:ie,js:je)              :: appinvA
+  real*8                                      :: resTh, resp1Thp1, dTz, resp1Tresp1
+  real*8, dimension(is:ie,js:je)              :: C
+  real*8                                      :: dmax, hmax, beta_min
+  real*8                                      :: convergence_rate
+  real*8                                      :: maximprovement, maximprovement1
+  real*8                                      :: solmax
 
-! sol:  best guess of solution
-! res:  residual vector res = forc - A*sol 
-! d:    search direction sol_new = sol + beta*d
-!       sol_new = sol + alpha*d
-!       d_new   = res + beta*d
-! initialize variables
-  A   = 0.0
-  res = 0.0
-  sol = 0.0
-  d   = 0.0
-  z   = 0.0
+! This routine solves the Poisson equation with the Preconditioned Conjugate Gradient method (PCG)
+!
+! -------------------------------------------------------------------------------
+! Numenclatura:
+! -------------------------------------------------------------------------------
+! forc = A * sol    : Poisson equation
+!
+! sol:    iterative solution
+! A:      Laplace operator
+! forc:   inhomogenity in Poisson equation
+! res:    residual of solution: res = forc - A*sol 
+!
+! -------------------------------------------------------------------------------
+! The Algorithm (after Wikipedia "CG-Verfahren"):
+! -------------------------------------------------------------------------------
+! Calculated once per iteration and than saved to save computational time:
+!   z       = A*d 
+! Find new solution:
+!   alpha   = res*h / d*z
+!   sol_new = sol + alpha * d
+! Update residuum:
+!   res_new = res - alpha * z
+! Update h:
+!   h_new   = C * res_new
+! Update search direction:
+!   beta    = r_new*h_new / r*h
+!   d_new   = h_new + beta * d
 
+! ----------------------------------------
 ! make coefficient matrix A
+! ----------------------------------------
   if ( first) then
     call make_matrix(is,ie,js,je,dx,dy,A)
     first = .false.
   endif
 
+! ----------------------------------------
+! make preconditioned matrix C
+! ----------------------------------------
+  call precond_mat(is,ie,js,je,A,C)
+
+! ----------------------------------------
 ! initial guess
-  call approx_inv_mat(is,ie,js,je,A,appinvA)
-  call prod_invA_forc(is,ie,js,je,appinvA,forc,sol)
-  call cyclic_exchange_2d(sol)
+! ----------------------------------------
+  !call matrixC_prod(is,ie,js,je,C,forc,sol)
+  !call cyclic_exchange_2d(sol)
+  sol = 0.0
 
-! r0 = b - A*x
+! ----------------------------------------
+! r0 = b - A*x0
+! ----------------------------------------
   call matrix_prod(is,ie,js,je,A,sol,res)
-  call cyclic_exchange_2d(res)
+  !call cyclic_exchange_2d(res)  !?? no cyclic
   res = forc - res
-! d0 = r0
-  d = res
 
+! ----------------------------------------
+! h0 = C*r0
+! ----------------------------------------
+  call matrixC_prod(is,ie,js,je,C,res,h)
+
+! security check (if h=0, we divide by 0 when calculating beta) 
+  n = 0
+  call absmax_element(is,ie,js,je, h, hmax)
+  if ( 100.0*hmax .lt. crit ) then
+    est_error = 100.0*hmax
+    goto 101    ! success
+  endif
+
+! ----------------------------------------
+! d0 = h0
+! ----------------------------------------
+  d = h
+
+! ----------------------------------------
+! enter main loop
+! ----------------------------------------
   do n=1,max_itt
-    ! z = A * d
+    ! ----------------------------------------
+    ! z = A * d_k
+    ! ----------------------------------------
     call matrix_prod(is,ie,js,je,A,d,z)
-    call cyclic_exchange_2d(z)
+    !call cyclic_exchange_2d(z) !?? not necessary
 
-    ! r^T*r and d^T*z
-    call scalar_prod(is,ie,js,je,res,res,resTres)
+    ! ----------------------------------------
+    ! r^T*h and d^T*z
+    ! ----------------------------------------
+    call scalar_prod(is,ie,js,je,res,h,resTh)
     call scalar_prod(is,ie,js,je,d,z,dTz)
 
-    ! alpha = r^T*r / d^T*z
-    alpha = resTres / dTz
-
-    ! x_n+1 = x_n + alpha * d
-    sol = sol + alpha * d
-
-    ! res_n+1 = res_n - alpha*z
-    res = res - alpha * z
-
-    ! res_n+1^T*res_n+1
-    call scalar_prod(is,ie,js,je,res,res,resnTresn)
-
-    ! beta = res_n+1^T*res_n+1 / res^T*res  
-    beta = resnTresn / resTres
-
-    ! d_n+1 = r_n+1 + beta*d_n
-    d = res + beta * d
-
-    write(*,*) abs((beta-1.0))
-    if ( abs((beta-1.0)) < crit ) then
-    ! stop iteration
-      goto 100
+    ! security check (if d=0, we divide by 0 when calculating alpha)
+    if ( abs(dTz) .lt. abs(beta)*1e-10 ) then
+      call absmax_element(is,ie,js,je, d, dmax)
+      est_error = 100.0 * dmax
+      !goto 101    ! success
     endif
 
-  enddo
-100 write(*,*) "Converged after n = ", n 
+    ! ----------------------------------------
+    ! alpha_k = r_k^T*h_k / d_k^T*z
+    ! ----------------------------------------
+    alpha = resTh / dTz
+
+    ! ----------------------------------------
+    ! x_k+1 = x_k + alpha_k * d_k
+    ! ----------------------------------------
+    sol = sol + alpha * d
+
+    ! ----------------------------------------
+    ! res_k+1 = res_k - alpha_k * z
+    ! ----------------------------------------
+    res = res - alpha * z
+
+    ! ----------------------------------------
+    ! h_k+1 = C * r_k+1
+    ! ----------------------------------------
+    call matrixC_prod(is,ie,js,je,C,res,h)
+    !call cyclic_exchange_2d(h)
+
+    ! ----------------------------------------
+    ! res_k+1^T*h_h+1
+    ! ----------------------------------------
+    call scalar_prod(is,ie,js,je,res,h,resp1Thp1)
+
+    ! ----------------------------------------
+    ! beta = res_k+1^T*h_k+1 / res_k^T*h_k  
+    ! ----------------------------------------
+    beta = resp1Thp1 / resTh
+
+    !if ( n==10 ) then
+    !  write(*,*) "alpha = ", alpha
+    !  write(*,*) "beta  = ", beta
+    !  write(*,*) sngl(res)
+    !  stop
+    !endif
+
+    ! security check
+    if ( n==1 ) then
+      beta_min = abs(beta)
+    else
+      beta_min = min(beta_min,abs(beta))
+      if ( abs(beta) .gt. 100.0*beta_min ) then
+        write(*,*) "Warning: Solver is diverging at itt = ??"
+      endif
+    endif
+
+    ! ----------------------------------------
+    ! d_k+1 = h_k+1 + beta_k*d_k
+    ! ----------------------------------------
+    d = h + beta * d
+    !?? call cyclic_exchange_2d(d)
+
+    ! ----------------------------------------
+    ! test for convergence
+    ! ----------------------------------------
+    call absmax_element(is,ie,js,je, d, dmax)
+    maximprovement = abs(alpha) * dmax
+    if ( n == 1 ) then
+      maximprovement1 = maximprovement
+      est_error = maximprovement
+      if ( est_error .lt. crit )  goto 101    !success
+    else
+      convergence_rate = exp(log(maximprovement/maximprovement1)/(n-1))
+      est_error = maximprovement*convergence_rate/(1.0-convergence_rate)
+      call scalar_prod(is,ie,js,je,res,res,resp1Tresp1)
+      write(*,*) "n = ", n, "; convergence_rate = ", sngl(convergence_rate), &
+               & "; est_error = ", sngl(est_error), "; abs(resp1) = ", resp1Tresp1
+      call absmax_element(is,ie,js,je, sol, solmax)
+      write(*,*) "absmax_element(sol) = ", solmax
+      !if ( est_error .lt. crit )  goto 101    !success
+    endif
+      
+  enddo ! end of iteration
+
+  ! not converged after max_itt steps 
+  !goto 99    ! error
+  goto 101
+
+! error
+99  write(*,*) ":: There is no convergence! ::"
+  stop
+
+! success
+101 write(*,*) "Converged after n = ", n 
 
 end subroutine solve_poisson_cg
-
-!subroutine make_matrix2(A)
-!  implicit none
-!  real*8, dimension(3,3), intent(out):: A
-!  integer :: i,j
-!  A = 0.0
-!  A(1,2) = -1.0
-!  A(2,1) = 2.0
-!  A(3,3) = 3.0
-!end subroutine make_matrix2
-!
-!subroutine matrix_prod2(A,v,mprod)
-!  real*8, dimension(3,3), intent(in):: A
-!  real*8, dimension(3), intent(in):: v
-!  real*8, dimension(3), intent(out):: mprod
-!  mprod = 0.0
-!  do j=1,3
-!    mprod(i) = mprod(i) + A(i,j)*v(j) 
-!  enddo
-!end subroutine matrix_prod2
 
 subroutine make_matrix(is,ie,js,je,dx,dy,A)
   implicit none
@@ -154,74 +257,91 @@ subroutine scalar_prod(is,ie,js,je,p1,p2,sprod)
   enddo
 end subroutine scalar_prod
 
-subroutine matrix_prod(is,ie,js,je,A,v,mprod)
+subroutine matrix_prod(is,ie,js,je,A,d,z)
   implicit none
 !INPUT PARAMETERS:  ======================================== 
   integer, intent(in)                         :: is,ie,js,je
-  real*8, dimension(is:ie,js:je), intent(in)  :: v
+  real*8, dimension(is:ie,js:je), intent(in)  :: d
   !real*8, dimension(is:ie,js:je,3,3), intent(out) :: A
   real*8, dimension(3,3), intent(out) :: A
 !OUTPUT PARAMETERS: ======================================== 
-  real*8, dimension(is:ie,js:je), intent(out) :: mprod
+  real*8, dimension(is:ie,js:je), intent(out) :: z
 !LOCAL VARIABLES:   ======================================== 
   integer                                     :: i, j, ii, jj
-  mprod = 0.0
+  z = 0.0
   do j=js+1,je-1
     do i=is+1,ie-1
       do ii = -1,1
         do jj = -1,1
-          !mprod(i,j) = mprod(i,j) + A(i,j,ii+2,jj+2)*v(i+ii,j+jj)
-          mprod(i,j) = mprod(i,j) + A(ii+2,jj+2)*v(i+ii,j+jj)
+          !z(i,j) = z(i,j) + A(i,j,ii+2,jj+2)*d(i+ii,j+jj)
+          z(i,j) = z(i,j) + A(ii+2,jj+2)*d(i+ii,j+jj)
         enddo
       enddo
     enddo
   enddo
 end subroutine matrix_prod
 
-subroutine approx_inv_mat(is,ie,js,je,A,appinvA)
+subroutine precond_mat(is,ie,js,je,A,C)
   implicit none
 !INPUT PARAMETERS:  ======================================== 
   integer, intent(in)                         :: is,ie,js,je
   !real*8, dimension(is:ie,js:je,3,3), intent(in):: A
   real*8, dimension(3,3), intent(in):: A
 !OUTPUT PARAMETERS: ======================================== 
-  real*8, dimension(is:ie,js:je), intent(out):: appinvA
+  real*8, dimension(is:ie,js:je), intent(out):: C
 !LOCAL VARIABLES:   ======================================== 
   integer                                     :: i,j,k
-  appinvA=0.0
+  C=0.0
   ! copy diagonal elements
   do j=js,je
     do i=is,ie
-      !appinvA(i,j) = A(i,j,2,2)
-      appinvA(i,j) = A(2,2)
+      !C(i,j) = A(i,j,2,2)
+      C(i,j) = A(2,2)
     enddo
   enddo
   ! invert A
   do j=js,je
     do i=is,ie
-      if ( appinvA(i,j) .ne. 0.0 ) then
-        appinvA(i,j) = 1/appinvA(i,j)
+      if ( C(i,j) .ne. 0.0 ) then
+        C(i,j) = 1/C(i,j)
       else
-        appinvA(i,j) = 0.0
+        C(i,j) = 0.0
       endif
     enddo
   enddo
-end subroutine approx_inv_mat
+end subroutine precond_mat
 
-subroutine prod_invA_forc(is,ie,js,je,appinvA,forc,sol)
+subroutine matrixC_prod(is,ie,js,je,C,res,h)
   implicit none
 !INPUT PARAMETERS:  ======================================== 
   integer, intent(in)                         :: is,ie,js,je
-  real*8, dimension(is:ie,js:je), intent(in)  :: appinvA
-  real*8, dimension(is:ie,js:je), intent(in)  :: forc 
+  real*8, dimension(is:ie,js:je), intent(in)  :: C
+  real*8, dimension(is:ie,js:je), intent(in)  :: res
 !OUTPUT PARAMETERS: ======================================== 
-  real*8, dimension(is:ie,js:je), intent(out) :: sol
+  real*8, dimension(is:ie,js:je), intent(out) :: h
 !LOCAL VARIABLES:   ======================================== 
   integer                                     :: i,j,k
-  sol=0.0
+  h=0.0
   do j=js,je
     do i=is,ie
-      sol(i,j) = appinvA(i,j)*forc(i,j)
+      h(i,j) = C(i,j)*res(i,j)
     enddo
   enddo
-end subroutine prod_invA_forc
+end subroutine matrixC_prod
+
+subroutine absmax_element(is,ie,js,je, d, dmax)
+  implicit none
+!INPUT PARAMETERS:  ======================================== 
+  integer, intent(in)                         :: is,ie,js,je
+  real*8, dimension(is:ie,js:je), intent(in)  :: d 
+!OUTPUT PARAMETERS: ======================================== 
+  real*8, intent(out)                         :: dmax
+!LOCAL VARIABLES:   ======================================== 
+  integer                                     :: i,j,k
+  dmax = 0.0
+  do j=js,je
+    do i=is,ie
+      dmax = max(abs(d(i,j)),dmax)
+    enddo
+  enddo
+end subroutine absmax_element

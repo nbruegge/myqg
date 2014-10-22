@@ -36,6 +36,11 @@ module myqg_module
   real*8  :: timeio
   real*8  :: epsab=0.01
 
+! parameters for Poisson solver
+  integer :: max_itt=100
+  real*8  :: crit=0.1
+  real*8  :: est_error
+
 ! mpi parameters
   integer :: numpr
   integer :: npr

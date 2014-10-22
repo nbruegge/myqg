@@ -11,8 +11,8 @@ program main
   integer :: nt
   real*8 :: d,r
 
-  nx = 120
-  ny = 120
+  nx = 50
+  ny = 50
   nz = 2
   path_data = "/scratch/uni/ifmto/u241161/myqg/test/"
 
@@ -83,17 +83,17 @@ program main
   enddo
   fCoru=0.0
 
-  do i=1-ox,nx+ox
-    do j=1-ox,ny+ox
+  do i=1,nx
+    do j=1,ny
       do k=1,nz
         !pv(i,j,k) = exp(-( ((xt(i)-Lx/2.)/(0.1*Lx))**2 + ((yt(j)-Ly/2.)/(0.1*Ly))**2 ))
         !pv(i,j,k) = (2*pi)**2*(-1/Lx**2-1/Ly**2) * sin(xu(i)/Lx*2*pi)*cos(yu(j)/Ly*2*pi)
-        d = 0.1*Lx
-        r = ( (xu(i)-Lx/2.)**2 + (yu(j)-Ly/2.)**2 )**0.5
+        d = 0.1 * (Lx**2+Ly**2)**0.5
+        r = ( (xt(i)-Lx/2.)**2 + (yt(j)-Ly/2.)**2 )**0.5
         !pv(i,j,k) = 1.0 / ( (r/d) + 0.1 )
-        ! pv(i,j,k) = 2/d**2* ( 2*r**2/d**2 - 1) * exp(-  r**2/d**2  )
-        pv(i,j,k) = exp(- r/d)
-        forc(i,j,k) = pv(i,j,k) - fCoru(j)
+        pv(i,j,k) = 4.0/d**2* ( r**2/d**2 - 1) * exp(-  r**2/d**2  )
+        ! pv(i,j,k) = exp(- r/d)
+        forc(i,j,k) = pv(i,j,k)
         !pv(i,j,k) = j*nx + i
       enddo
     enddo
@@ -117,12 +117,12 @@ program main
   !call write_3d("RF        ", zu, (/  1,  1, nz /), -1, path_data)
   call write_3d("RF        ", (/ zu(:), 0.d0 /), (/  1,  1, nz+1 /), -1, path_data)
 
-  call cyclic_exchange(pv)
-  call cyclic_exchange(forc)
+  !call cyclic_exchange(pv)
+  !call cyclic_exchange(forc)
   do k=1,1!nz
-    call solve_poisson_cg(1-ox,nx+ox,1-ox,ny+ox,dx,dy,forc(:,:,k),psi(:,:,k),100,0.1d0)
+    call solve_poisson_cg(1-ox,nx+ox,1-ox,ny+ox,dx,dy,forc(:,:,k),psi(:,:,k),max_itt,crit, est_error)
   enddo
-  call write_3d("psi       ", psi(1:nx,1:ny,1:nz), (/ nx,  ny,  nz /), 10, path_data)
+  call write_3d("psi       ", psi(1:nx,1:ny,1:nz),  (/ nx,  ny,  nz /), 10, path_data)
   call write_3d("pv        ", pv (1:nx,1:ny,1:nz),  (/ nx,  ny,  nz /), 10, path_data)
   stop
 
