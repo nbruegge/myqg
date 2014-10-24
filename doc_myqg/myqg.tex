@@ -1,0 +1,50 @@
+\documentclass[a4paper,10pt]{article}
+\usepackage[utf8x]{inputenc}
+\usepackage{amsmath}
+
+\newcommand{\px}{\partial_x}
+\newcommand{\py}{\partial_y}
+
+%opening
+\title{myQG}
+\author{Nils Br\"uggemann}
+
+\begin{document}
+
+\maketitle
+
+\section{Model equations}
+The diagnostic equation for quasi-geostrophic potential vorticity of layer $k$ $q_k$ reads as follows:
+\begin{align}
+ \partial_t q_k + u_k \partial_x q_k + v_k \partial_y q_k = F_k + D_k 
+\end{align}
+The velocity components $u_k$ and $v_k$ are derived by:
+\begin{align}
+ u_k &= - \py \psi_k,
+&
+ v_k &=   \px \psi_k.
+\end{align}
+The streamfunction $\psi_k$ can be obtained by inverting the following equation:
+\begin{align}
+ q_k = \beta y + \nabla^2 \psi_k + \frac{f_0}{H_k} \left( \frac{\psi_{k-1} - \psi_k}{g'_k} - \frac{\psi_k-\psi_{k+1}}{g'_{k+1}} \right)
+\end{align}
+where $H_k$ denotes a constant mean layer width, and $g'_{k}$ the reduced gravity that can be calculated as follows:
+\begin{align}
+ g'_k = \frac{g'_1}{\rho_1} ( \rho_k - \rho_{k-1} )
+\end{align}
+with $g'_1 = g$ and $\rho_k$ the densitiy of layer $k$.
+The layer width $h_k$ of each layer can be calculated by
+\begin{align}
+ h_k = H_k + \eta_k
+\end{align}
+with $\eta_k$ given by:
+\begin{align}
+ \eta_k
+\end{align}
+
+
+
+
+
+
+\end{document}
