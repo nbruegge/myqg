@@ -4,34 +4,54 @@ program main
   implicit none
 
   integer :: i,j,k,l,n
+  integer :: is,ie,js,je
   character(len=128) :: fname
   character(len=128) :: fprfx
   character(len=128) :: path_data
   integer, dimension(3) :: dims
+  real*8, allocatable, dimension(:,:,:) :: A
   integer :: nt
   real*8 :: d,r
 
+! ================================================================================ 
+! initialize model
+! ================================================================================ 
   nx = 50
   ny = 50
-  nz = 2
+  nz = 3
   path_data = "/scratch/uni/ifmto/u241161/myqg/test/"
 
   call allocate_myqg_module
+  allocate( A(3,3,nz) ); A=0.0
 
-  dx = 1.0
-  dy = 1.0
-  dz = (/ 50.d0, 50.d0 /)
+  dx  = 1.0e3
+  dy  = 1.0e3
 
-  nt = 1000
-  dt = 1.e3
-  tstep = 0
+  f0    = 1e-4
+  beta  = 0.0
+
+  ! this results in N2 = 1e-3
+  Hk      = 100.0
+  rho(1)  = 1000.
+  gred(1) = 10.
+  do k=2,nz
+    rho(k) = rho(k-1) + 10.0
+    gred(k) = gred(1)/rho(1) * (rho(k) - rho(k-1))
+  enddo
+
+  ! time stepping
+  nt      = 2
+  !nt      = 1
+  dt      = 1.e1
+  tstep   = 0
   t_start = dt * tstep
   time    = t_start
   t_end   = dt * nt
   timeio  = t_end / 40. 
 
   diffPVh = 0.1 * dx**2/dt/4.0
-
+  
+  ! grid
   do i=1,nx
     xu(i) = dx*(i-1)
     xt(i) = dx*(i-0.5)
@@ -42,71 +62,65 @@ program main
     yt(j)=dy*(j-0.5)
   enddo 
 
-  do k=2,nz
-    zu(k)=zu(k-1) + dz(k)
-  enddo
-  do k=1,nz
-    zt(k)=zu(k) + 0.5*dz(k)
-  enddo
-
-  do i=1,nx
-    do j=1,ny
-      do k=1,nz
-        recepvol(i,j,k) = 1.0 / (dx*dy*dz(k))
-      enddo
-    enddo
-  enddo
-
   Lx = nx*dx
   Ly = ny*dy
 
+  do k=2,nz
+    zu(k)=zu(k-1) + Hk(k)
+  enddo
   do k=1,nz
-    do i=1-ox,nx+ox
-      do j=1-ox,ny+ox
-        !u(i,j,k) = sin(4*xu(i)/Lx*2*pi)*cos(yu(j)/Ly*2*pi)
-        !u(i,j,k) = (xu(i)/Lx)**2 + (yu(j)/Ly)**2 
-        !u(i,j,k) = i*j*k
-        !u(i,j,k) = 1.
-        !v(i,j,k) = 1.
-        psi(i,j,k) = - dy*j + dx*i
+    zt(k)=zu(k) + 0.5*Hk(k)
+  enddo
+
+  ! initial pv
+  do i=1,nx
+    do j=1,ny
+      do k=1,nz
+        d = 0.1 * (Lx**2+Ly**2)**0.5
+        r = ( (xt(i)-Lx/2.)**2 + (yt(j)-Ly/2.)**2 )**0.5
+        !pv (i,j,k) = 1.e2 * 4.0/d**2* ( r**2/d**2 - 1) *  exp(- r**2/d**2 )
+        psi(i,j,k) = 1.e2 *                               exp(- r**2/d**2 )
       enddo
     enddo
   enddo
-  !fprfx = "test"
-  !call write_3d(fprfx, u)
 
-  f0 = 1e-7
-  beta = 0.0
+!  do j=1-ox,ny+ox
+!    do i=1-ox,nx+ox
+!      do k=1,nz
+!        !u(i,j,k) = sin(4*xu(i)/Lx*2*pi)*cos(yu(j)/Ly*2*pi)
+!        !u(i,j,k) = (xu(i)/Lx)**2 + (yu(j)/Ly)**2 
+!        !u(i,j,k) = i*j*k
+!        !u(i,j,k) = 1.
+!        !v(i,j,k) = 1.
+!        psi(i,j,k) = - dy*j + dx*i
+!      enddo
+!    enddo
+!  enddo
+
+
+! ================================================================================ 
+  write(*,*) "Finished: Initialize variables"
+! ================================================================================ 
+
   do j=1,ny
     fCoru = f0 + beta*yu(j)
     fCort = f0 + beta*yt(j)
   enddo
-  fCoru=0.0
 
-  do i=1,nx
-    do j=1,ny
+  ! inhomogenity of poisson equation
+  do j=1-ox,ny+ox
+    do i=1-ox,nx+ox
       do k=1,nz
-        !pv(i,j,k) = exp(-( ((xt(i)-Lx/2.)/(0.1*Lx))**2 + ((yt(j)-Ly/2.)/(0.1*Ly))**2 ))
-        !pv(i,j,k) = (2*pi)**2*(-1/Lx**2-1/Ly**2) * sin(xu(i)/Lx*2*pi)*cos(yu(j)/Ly*2*pi)
-        d = 0.1 * (Lx**2+Ly**2)**0.5
-        r = ( (xt(i)-Lx/2.)**2 + (yt(j)-Ly/2.)**2 )**0.5
-        !pv(i,j,k) = 1.0 / ( (r/d) + 0.1 )
-        pv(i,j,k) = 4.0/d**2* ( r**2/d**2 - 1) * exp(-  r**2/d**2  )
-        ! pv(i,j,k) = exp(- r/d)
-        forc(i,j,k) = pv(i,j,k)
-        !pv(i,j,k) = j*nx + i
+        forc(i,j,k) = pv(i,j,k) - beta * yu(j) 
       enddo
     enddo
   enddo
 
-!  write(*,*) sngl(pv(:,1,1))
-!  call cyclic_exchange(pv)
-!  write(*,*) "start"
-!  do j=1-ox,ny+ox
-!    write(*,*) sngl(pv(:,j,1))
-!  enddo
-!  stop
-  write(*,*) "Finished: Initialize variables"
+  !call solve_poisson_cg(1-ox,nx+ox,1-ox,ny+ox,nz,forc,psi,max_itt,crit, est_error)
+
+  call make_matrix(1-ox, nx+ox, 1-ox, ny+ox, A)
+  call matrix_prod(1-ox, nx+ox, 1-ox, ny+ox, nz, A, psi, pv)
+  call solve_poisson_cg(1-ox, nx+ox, 1-ox, ny+ox, nz, pv,   hpr, max_itt, crit, est_error)
 
   ! write grid data out
   call write_3d("XC        ", xt, (/ nx,  1,  1 /), -1, path_data)
@@ -119,23 +133,49 @@ program main
 
   !call cyclic_exchange(pv)
   !call cyclic_exchange(forc)
-  do k=1,1!nz
-    call solve_poisson_cg(1-ox,nx+ox,1-ox,ny+ox,dx,dy,forc(:,:,k),psi(:,:,k),max_itt,crit, est_error)
-  enddo
-  call write_3d("psi       ", psi(1:nx,1:ny,1:nz),  (/ nx,  ny,  nz /), 10, path_data)
-  call write_3d("pv        ", pv (1:nx,1:ny,1:nz),  (/ nx,  ny,  nz /), 10, path_data)
-  stop
+  call write_3d("psi       ", psi(1:nx,1:ny,1:nz),  (/ nx,  ny,  nz /), 0, path_data)
+  call write_3d("pv        ", pv (1:nx,1:ny,1:nz),  (/ nx,  ny,  nz /), 0, path_data)
+  call write_3d("u         ", u  (1:nx,1:ny,1:nz),  (/ nx,  ny,  nz /), 0, path_data)
+  call write_3d("v         ", v  (1:nx,1:ny,1:nz),  (/ nx,  ny,  nz /), 0, path_data)
+  call write_3d("hpr       ", hpr(1:nx,1:ny,1:nz),  (/ nx,  ny,  nz /), 0, path_data)
 
-  ! main time stepping loop
+! ================================================================================ 
+! main time stepping loop
+! ================================================================================ 
   write(*,*) "Start: Time stepping"
   do while ( time < t_end )
     tstep = tstep + 1
     time  = tstep*dt
 
+  ! assume psi is known already (initial psi or from last iteration) 
+
+    ! calculate interface dissplacement
+    do j=1-ox,ny+ox
+      do i=1-ox,nx+ox
+        do k=1,nz
+          if ( k==1 ) then
+            hpr(i,j,k) = f0/gred(k)*( psi(i,j,k) )
+          else
+            hpr(i,j,k) = f0/gred(k)*( psi(i,j,k) - psi(i,j,k-1) )
+          endif
+        enddo
+      enddo
+    enddo
+
+    ! calculate layer width and reciprocal volume
+    do j=1-ox,ny+ox
+      do i=1-ox,nx+ox
+        do k=1,nz
+          dz(i,j,k)       = Hk(k) + hpr(i,k,k)
+          recepvol(i,j,k) = 1.0 / (dx*dy*dz(i,j,k))
+        enddo
+      enddo
+    enddo
+
     ! calculate velocity
     call calc_curl_psi
-    call cyclic_exchange(u)
-    call cyclic_exchange(v)
+    !call cyclic_exchange(u)
+    !call cyclic_exchange(v)
 
     ! calculate tendencies
     call calc_Gpv
@@ -150,9 +190,21 @@ program main
     Gpvm1 = Gpv
     Gpv = 0.0
 
+    ! inhomogenity of poisson equation
+    do j=1-ox,ny+ox
+      do i=1-ox,nx+ox
+        do k=1,nz
+          forc(i,j,k) = pv(i,j,k) - beta * yu(j) 
+        enddo
+      enddo
+    enddo
+
+    ! calculate streamfunction
+    call solve_poisson_cg(1-ox, nx+ox, 1-ox, ny+ox, nz, forc, psi, max_itt, crit, est_error)
+
     ! do cyclic_exchange (Does this occur at correct place???)
     !call cyclic_exchange(psi)
-    call cyclic_exchange(pv)
+    !call cyclic_exchange(pv)
 
     ! do model I/O
     if ( floor(time/timeio) == time/timeio ) then
@@ -161,12 +213,15 @@ program main
       call write_3d('psi       ', psi(1:nx,1:ny,1:nz), (/ nx, ny, nz /), tstep, path_data)
       call write_3d('u         ', u  (1:nx,1:ny,1:nz), (/ nx, ny, nz /), tstep, path_data)
       call write_3d('v         ', v  (1:nx,1:ny,1:nz), (/ nx, ny, nz /), tstep, path_data)
+      call write_3d('hpr       ', hpr(1:nx,1:ny,1:nz), (/ nx, ny, nz /), tstep, path_data)
     endif
 
-  enddo
+  enddo 
+! ================================================================================ 
+! end main time stepping loop
+! ================================================================================ 
 
   write(*,*) "nx = ", nx, " ny = ", ny, " nz = ", nz
-
   write(*,*) "All done"
 end program main
 
@@ -178,7 +233,7 @@ subroutine calc_Gpv
 !LOCAL VARIABLES:   ======================================== 
   !Gpv = -pv/t_end
   call calc_pvadv
-  !call calc_pvdiff
+  call calc_pvdiff
 end subroutine calc_Gpv
 
 subroutine calc_curl_psi
@@ -214,21 +269,34 @@ subroutine calc_pvdiff
   real*8, dimension(1-ox:nx+ox,1-ox:ny+ox,nz) :: fZon
   real*8, dimension(1-ox:nx+ox,1-ox:ny+ox,nz) :: fMer
 
+  fZon = 0.0
+  fMer = 0.0
+
   do i=1-ox,nx+ox-1
     do j=1-ox,ny+ox
       do k=1,nz
-        fZon(i,j,k) = -diffPVh * (pv(i+1,j,k)-pv(i,j,k))/dx * dy*dz(k)
+        fZon(i,j,k) = -diffPVh * (pv(i+1,j,k)-pv(i,j,k))/dx * dy*dz(i,j,k)
       enddo
     enddo
   enddo
 
+  if ( .not. cyclic_x ) then
+    fZon(1, :,:) = 0.0
+    fZon(nx,:,:) = 0.0
+  endif
+
   do i=1-ox,nx+ox
     do j=1-ox,ny+ox-1
       do k=1,nz
-        fMer(i,j,k) = -diffPVh * (pv(i,j+1,k)-pv(i,j,k))/dy * dx*dz(k)
+        fMer(i,j,k) = -diffPVh * (pv(i,j+1,k)-pv(i,j,k))/dy * dx*dz(i,j,k)
       enddo
     enddo
   enddo
+
+  if ( .not. cyclic_y ) then
+    fMer(:,1 ,:) = 0.0
+    fMer(:,ny,:) = 0.0
+  endif
 
   ! diffusive tendency
   do i=1,nx
@@ -264,7 +332,7 @@ subroutine calc_pvadv
   do i=1-ox,nx+ox
     do j=1-ox,ny+ox
       do k=1,nz
-        uTrans(i,j,k) = 0.25 * ( u(i,j,k) + u(i+1,j,k) + u(i,j+1,k) + u(i+1,j+1,k) )*dy*dz(k)
+        uTrans(i,j,k) = 0.25 * ( u(i,j,k) + u(i+1,j,k) + u(i,j+1,k) + u(i+1,j+1,k) )*dy*dz(i,j,k)
       enddo
     enddo
   enddo
@@ -281,7 +349,7 @@ subroutine calc_pvadv
   do i=1-ox,nx+ox
     do j=1-ox,ny+ox
       do k=1,nz
-        vTrans(i,j,k) = 0.25 * ( v(i,j,k) + v(i+1,j,k) + v(i,j+1,k) + v(i+1,j+1,k) )*dx*dz(k)
+        vTrans(i,j,k) = 0.25 * ( v(i,j,k) + v(i+1,j,k) + v(i,j+1,k) + v(i+1,j+1,k) )*dx*dz(i,j,k)
       enddo
     enddo
   enddo
@@ -315,6 +383,9 @@ subroutine cyclic_exchange(var)
 !LOCAL VARIABLES:   ======================================== 
   integer :: i,j,k
   real*8, dimension(1-ox:nx+ox,1-ox:ny+ox,nz), intent(inout) :: var
+
+  call myqg_error("cyclic_exchange should not been called!")
+
   if ( cyclic_x .and. cyclic_y ) then
     do i=1,ox
       do j=1,ny
@@ -395,7 +466,7 @@ subroutine write_3d(fprfx, outdata, dims, tstepout, path_data)
 
 ! write .data file
   !if (present(tstepout)) then
-  if (tstepout>0) then
+  if (tstepout>=0) then
     write(tstepstr,"(I10.10)") tstepout
     fname = trim(path_data) // trim(fprfx) // "." // tstepstr // ".data"
   else
@@ -409,7 +480,7 @@ subroutine write_3d(fprfx, outdata, dims, tstepout, path_data)
 
 ! write .meta file
   !if (present(tstepout)) then
-  if (tstepout>0) then
+  if (tstepout>=0) then
     write(tstepstr,"(I10.10)") tstepout
     fname = trim(path_data) // trim(fprfx) // "." // tstepstr // ".meta"
   else
