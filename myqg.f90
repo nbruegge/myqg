@@ -12,6 +12,7 @@ program main
   real*8, allocatable, dimension(:,:,:) :: A
   integer :: nt
   real*8 :: d,r
+  logical :: doio
 
 ! ================================================================================ 
 ! initialize model
@@ -40,14 +41,15 @@ program main
   enddo
 
   ! time stepping
-  nt      = 2
+  nt      = 100
   !nt      = 1
   dt      = 1.e1
   tstep   = 0
   t_start = dt * tstep
   time    = t_start
   t_end   = dt * nt
-  timeio  = t_end / 40. 
+  timeio        = t_end / 10. 
+  time_monitor  = t_end / 10.
 
   diffPVh = 0.1 * dx**2/dt/4.0
   
@@ -116,11 +118,12 @@ program main
     enddo
   enddo
 
-  !call solve_poisson_cg(1-ox,nx+ox,1-ox,ny+ox,nz,forc,psi,max_itt,crit, est_error)
+  !call solve_poisson_cg(1-ox,nx+ox,1-ox,ny+ox,nz,forc,psi,max_itt,crit, est_error, doio)
 
   call make_matrix(1-ox, nx+ox, 1-ox, ny+ox, A)
   call matrix_prod(1-ox, nx+ox, 1-ox, ny+ox, nz, A, psi, pv)
-  call solve_poisson_cg(1-ox, nx+ox, 1-ox, ny+ox, nz, pv,   hpr, max_itt, crit, est_error)
+  doio = .true.
+  !call solve_poisson_cg(1-ox, nx+ox, 1-ox, ny+ox, nz, pv,   hpr, max_itt, crit, est_error, doio)
 
   ! write grid data out
   call write_3d("XC        ", xt, (/ nx,  1,  1 /), -1, path_data)
@@ -147,6 +150,18 @@ program main
     tstep = tstep + 1
     time  = tstep*dt
 
+    if ( floor(time/time_monitor) == time/time_monitor ) then
+      doio = .true.
+    else
+      doio = .false.
+    endif
+
+    if ( doio ) then
+      write(*,*) "================================================================================"
+      write(*,*) " tstep = ", tstep
+      write(*,*) "================================================================================"
+    endif
+ 
   ! assume psi is known already (initial psi or from last iteration) 
 
     ! calculate interface dissplacement
@@ -188,7 +203,6 @@ program main
 
     ! reset tendencies
     Gpvm1 = Gpv
-    Gpv = 0.0
 
     ! inhomogenity of poisson equation
     do j=1-ox,ny+ox
@@ -200,7 +214,7 @@ program main
     enddo
 
     ! calculate streamfunction
-    call solve_poisson_cg(1-ox, nx+ox, 1-ox, ny+ox, nz, forc, psi, max_itt, crit, est_error)
+    call solve_poisson_cg(1-ox, nx+ox, 1-ox, ny+ox, nz, forc, psi, max_itt, crit, est_error, doio)
 
     ! do cyclic_exchange (Does this occur at correct place???)
     !call cyclic_exchange(psi)
@@ -208,12 +222,14 @@ program main
 
     ! do model I/O
     if ( floor(time/timeio) == time/timeio ) then
+      write(*,*) "================================================================================"
       write(*,*) "Model I/O at tstep ", tstep
       call write_3d('pv        ', pv (1:nx,1:ny,1:nz), (/ nx, ny, nz /), tstep, path_data)
       call write_3d('psi       ', psi(1:nx,1:ny,1:nz), (/ nx, ny, nz /), tstep, path_data)
       call write_3d('u         ', u  (1:nx,1:ny,1:nz), (/ nx, ny, nz /), tstep, path_data)
       call write_3d('v         ', v  (1:nx,1:ny,1:nz), (/ nx, ny, nz /), tstep, path_data)
       call write_3d('hpr       ', hpr(1:nx,1:ny,1:nz), (/ nx, ny, nz /), tstep, path_data)
+      write(*,*) "================================================================================"
     endif
 
   enddo 

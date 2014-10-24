@@ -1,6 +1,6 @@
 
 
-subroutine solve_poisson_cg(is,ie,js,je,nz,forc,sol,max_itt,crit, est_error)
+subroutine solve_poisson_cg(is,ie,js,je,nz,forc,sol,max_itt,crit, est_error, doio)
   !use myqg_module
   implicit none
 !INPUT PARAMETERS:  ======================================== 
@@ -9,6 +9,7 @@ subroutine solve_poisson_cg(is,ie,js,je,nz,forc,sol,max_itt,crit, est_error)
   real*8, dimension(is:ie,js:je,nz), intent(in)  :: forc
   integer, intent(in)                         :: max_itt       
   real*8, intent(in)                          :: crit
+  logical, intent(in)                         :: doio
 !UPDATE PARAMETERS: ======================================== 
   ! INPUT   sol is used as initial guess
   ! OUTPUT: sol is calculated by inversion of forc
@@ -23,6 +24,7 @@ subroutine solve_poisson_cg(is,ie,js,je,nz,forc,sol,max_itt,crit, est_error)
   logical, save                               :: first=.true.
   real*8                                      :: alpha, beta
   real*8                                      :: resTh, resp1Thp1, dTz, resp1Tresp1
+  real*8                                      :: forcTforc 
   real*8, dimension(is:ie,js:je,nz)           :: C
   real*8                                      :: dmax, hmax, beta_min
   real*8                                      :: convergence_rate
@@ -76,7 +78,7 @@ subroutine solve_poisson_cg(is,ie,js,je,nz,forc,sol,max_itt,crit, est_error)
 ! ----------------------------------------
   !call matrixC_prod(is,ie,js,je,nz,C,forc,sol)
   !call cyclic_exchange_2d(sol)
-  sol = 0.0
+  !sol = 0.0
 
 ! ----------------------------------------
 ! r0 = b - A*x0
@@ -171,7 +173,8 @@ subroutine solve_poisson_cg(is,ie,js,je,nz,forc,sol,max_itt,crit, est_error)
     else
       beta_min = min(beta_min,abs(beta))
       if ( abs(beta) .gt. 100.0*beta_min ) then
-        !write(*,*) "Warning: Solver is diverging at itt = ??"
+        write(*,*) "Warning: Solver is diverging at n = ", n
+        !goto 99
       endif
     endif
 
@@ -181,25 +184,34 @@ subroutine solve_poisson_cg(is,ie,js,je,nz,forc,sol,max_itt,crit, est_error)
     d = h + beta * d
     !?? call cyclic_exchange_2d(d)
 
+
     ! ----------------------------------------
-    ! test for convergence
+    ! calculate convergence
     ! ----------------------------------------
     call absmax_element(is,ie,js,je,nz, d, dmax)
     maximprovement = abs(alpha) * dmax
+
     if ( n == 1 ) then
       maximprovement1 = maximprovement
       est_error = maximprovement
-      write(*,*) "converged at n=1"
       if ( est_error .lt. crit )  goto 101    !success
     else
       convergence_rate = exp(log(maximprovement/maximprovement1)/(n-1))
       est_error = maximprovement*convergence_rate/(1.0-convergence_rate)
-      call scalar_prod(is,ie,js,je,nz,res,res,resp1Tresp1)
-      write(*,*) "n = ", n, "; convergence_rate = ", sngl(convergence_rate), &
-               & "; est_error = ", sngl(est_error), "; abs(resp1) = ", resp1Tresp1
-      call absmax_element(is,ie,js,je,nz, sol, solmax)
-      write(*,*) "absmax_element(sol) = ", solmax
-      !if ( est_error .lt. crit )  goto 101    !success
+      ! ----------------------------------------
+      ! monitor solver
+      ! ----------------------------------------
+      if ( doio ) then
+        call scalar_prod(is,ie,js,je,nz,res,res,resp1Tresp1)
+        call scalar_prod(is,ie,js,je,nz,forc,forc,forcTforc)
+        write(*,*) "n = ", n, "; convergence_rate = ", sngl(convergence_rate), &
+                 & "; est_error = ", sngl(est_error), "; abs(resTres/forcTforc) = ", resp1Tresp1/forcTforc
+      endif
+
+      ! ----------------------------------------
+      ! if converged break out
+      ! ----------------------------------------
+      if ( est_error .lt. crit )  goto 101    !success
     endif
       
   enddo ! end of iteration

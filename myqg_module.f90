@@ -35,10 +35,13 @@ module myqg_module
   real*8  :: time
   real*8  :: timeio
   real*8  :: epsab=0.01
+  real*8  :: time_monitor
 
 ! parameters for Poisson solver
-  integer :: max_itt=100
-  real*8  :: crit=0.1
+  !integer :: max_itt=100
+  integer :: max_itt=1000     ! pyOM value
+  !real*8  :: crit=0.1
+  real*8  :: crit=1e-12       ! pyOM value
   real*8  :: est_error
 
 ! mpi parameters
