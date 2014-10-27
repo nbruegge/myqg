@@ -78,7 +78,7 @@ subroutine solve_poisson_cg(is,ie,js,je,nz,forc,sol,max_itt,crit, est_error, doi
 ! ----------------------------------------
   !call matrixC_prod(is,ie,js,je,nz,C,forc,sol)
   !call cyclic_exchange_2d(sol)
-  !sol = 0.0
+  sol = 0.0
 
 ! ----------------------------------------
 ! r0 = b - A*x0
@@ -98,7 +98,7 @@ subroutine solve_poisson_cg(is,ie,js,je,nz,forc,sol,max_itt,crit, est_error, doi
   if ( 100.0*hmax .lt. crit ) then
     est_error = 100.0*hmax
     write(*,*) "Converged before iteration"
-    !goto 101    ! success
+    goto 101    ! success
   endif
 
 ! ----------------------------------------
@@ -211,7 +211,8 @@ subroutine solve_poisson_cg(is,ie,js,je,nz,forc,sol,max_itt,crit, est_error, doi
       ! ----------------------------------------
       ! if converged break out
       ! ----------------------------------------
-      if ( est_error .lt. crit )  goto 101    !success
+      !if ( est_error .lt. crit )  goto 101    !success
+      if ( resp1Tresp1/forcTforc .lt. 1.e-10 )  goto 101    !success
     endif
       
   enddo ! end of iteration

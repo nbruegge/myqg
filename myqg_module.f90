@@ -54,24 +54,30 @@ module myqg_module
   real*8, allocatable, dimension(:,:,:)   :: u, v, w
   real*8, allocatable, dimension(:,:,:)   :: b, p
   real*8, allocatable, dimension(:,:,:)   :: psi, pv
+  real*8, allocatable, dimension(:,:,:)   :: pvp, pvr
   real*8, allocatable, dimension(:,:,:)   :: pt
   real*8, allocatable, dimension(:,:,:)   :: hpr
 
 ! tendencies for diagnostic variables
   real*8, allocatable, dimension(:,:,:)   :: Gpv
+  real*8, allocatable, dimension(:,:,:)   :: Gpvadv, Gpvdif, Gpvfor
   real*8, allocatable, dimension(:,:,:)   :: Gpvm1
   real*8, allocatable, dimension(:,:,:)   :: Gpt
   real*8, allocatable, dimension(:,:,:)   :: Gptm1
 
   real*8, allocatable, dimension(:)       :: rho, gred, Hk
 
-! forcing for poisson equation
+! forcing for poisson equation (forc = pv - beta*y)
   real*8, allocatable, dimension(:,:,:)   :: forc 
+
+! Ekman velocity
+  real*8, allocatable, dimension(:,:)     :: wek
  
 ! parameters for I/O
   character(len=24) :: endian = "big_endian"
   integer           :: bytes  = 4
   integer           :: fid    = 25
+  character(len=128) :: path_data="./"
 
 ! model parameters
   real*8, allocatable, dimension(:)       :: fCort, fCoru
@@ -88,8 +94,8 @@ subroutine allocate_myqg_module
   use myqg_module
   implicit none
   
-  allocate( xt(nx), xu(nx) ); xt=0; xu=0
-  allocate( yt(ny), yu(ny) ); yt=0; yu=0
+  allocate( xt(1-ox:nx+ox), xu(1-ox:nx+ox) ); xt=0; xu=0
+  allocate( yt(1-ox:ny+ox), yu(1-ox:ny+ox) ); yt=0; yu=0
   allocate( zt(nz), zu(nz) ); zt=0; zu=0
   allocate( fCort(ny), fCoru(ny) ); fCort=0; fCort=0
 
@@ -100,12 +106,16 @@ subroutine allocate_myqg_module
   allocate( w    (1-ox:nx+ox,1-ox:ny+ox,nz), p(1-ox:nx+ox,1-ox:ny+ox,nz) );     w=0; p=0
   allocate( b    (1-ox:nx+ox,1-ox:ny+ox,nz) );                                  b=0
   allocate( psi  (1-ox:nx+ox,1-ox:ny+ox,nz), pv(1-ox:nx+ox,1-ox:ny+ox,nz) );    psi=0; pv=0
+  allocate( pvp(1-ox:nx+ox,1-ox:ny+ox,nz), pvr(1-ox:nx+ox,1-ox:ny+ox,nz) );    pvp=0; pvr=0
   allocate( pt   (1-ox:nx+ox,1-ox:ny+ox,nz) );                                  pt=0
   allocate( hpr  (1-ox:nx+ox,1-ox:ny+ox,nz) );                                  hpr=0
   !allocate( Gpv(1-ox:nx+ox,1-ox:ny+ox,nz), Gpvm1(1-ox:nx+ox,1-ox:ny+ox,nz) ); Gpv=0; Gpvm1=0
   allocate( Gpv (nx,ny,nz), Gpvm1(nx,ny,nz) );                                  Gpv=0; Gpvm1=0
+  allocate( Gpvadv(nx,ny,nz), Gpvdif(nx,ny,nz) );                                  Gpvadv=0; Gpvdif=0
+  allocate( Gpvfor(nx,ny,nz)                   );                                  Gpvfor=0
   allocate( Gpt (1-ox:nx+ox,1-ox:ny+ox,nz), Gptm1(1-ox:nx+ox,1-ox:ny+ox,nz) );  Gpt=0; Gptm1=0
   allocate( forc(1-ox:nx+ox,1-ox:ny+ox,nz) );                                   forc=0
+  allocate( wek(1-ox:nx+ox,1-ox:ny+ox) );                                       wek=0
 
   allocate( rho(nz), gred(nz), Hk(nz) );                                        rho=0; gred=0; Hk=0;
 
