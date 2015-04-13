@@ -198,12 +198,12 @@ subroutine solve_poisson_cg(is,ie,js,je,nz,forc,sol,max_itt,crit, est_error, doi
     else
       convergence_rate = exp(log(maximprovement/maximprovement1)/(n-1))
       est_error = maximprovement*convergence_rate/(1.0-convergence_rate)
+      call scalar_prod(is,ie,js,je,nz,res,res,resp1Tresp1)
+      call scalar_prod(is,ie,js,je,nz,forc,forc,forcTforc)
       ! ----------------------------------------
       ! monitor solver
       ! ----------------------------------------
       if ( doio ) then
-        call scalar_prod(is,ie,js,je,nz,res,res,resp1Tresp1)
-        call scalar_prod(is,ie,js,je,nz,forc,forc,forcTforc)
         write(*,*) "n = ", n, "; convergence_rate = ", sngl(convergence_rate), &
                  & "; est_error = ", sngl(est_error), "; abs(resTres/forcTforc) = ", resp1Tresp1/forcTforc
       endif

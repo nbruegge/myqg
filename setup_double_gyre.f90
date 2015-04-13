@@ -54,7 +54,7 @@ subroutine initialize_setup
  ! enddo
   
   ! time stepping
-  nt      = 10
+  nt      = 1000
   !nt      = 1
   !dt      = 1200.
   !dt      = 86400.
@@ -66,10 +66,10 @@ subroutine initialize_setup
   timeio        = t_end / 10. 
   time_monitor  = t_end / 10.
 
-  diffPVh = dx**2/dt/4.0
+  !diffPVh = dx**2/dt/4.0
   ! beta v = - Ah v_xxx
   ! beta   = Ah / delata**3
-  !diffPVh = beta * ( 4*dx )**3
+  diffPVh = beta * ( 4*dx )**3
 
   write(*,*) "dx = ", dx, "dy = ", dy
   write(*,*) "gred = ", gred

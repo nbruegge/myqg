@@ -192,6 +192,31 @@ subroutine calc_pvdiff
 !OUTPUT PARAMETERS: ======================================== 
 !LOCAL VARIABLES:   ======================================== 
   integer :: i,j,k
+  ! prepare outer domain pv values for no-flux boundary conditions
+  pvr(0,:,:)    = pvr(1,:,:)
+  pvr(nx+1,:,:) = pvr(nx,:,:)
+  pvr(:,0,:)    = pvr(:,1,:)
+  pvr(:,ny+1,:) = pvr(:,ny,:)
+
+  Gpvdif = 0.0
+  do i=1,nx
+    do j=1,ny
+      do k=1,nz
+        Gpvdif(i,j,k) =   1.0/dx**2 * ( pvr(i+1,j,k) - 2.0*pvr(i,j,k) + pvr(i-1,j,k) ) & 
+                      & + 1.0/dy**2 * ( pvr(i,j+1,k) - 2.0*pvr(i,j,k) + pvr(i,j-1,k) )  
+      enddo
+    enddo
+  enddo
+  Gpv = Gpv + Gpvdif
+end subroutine calc_pvdiff
+  
+subroutine calc_pvdiff_old
+  use myqg_module
+  implicit none
+!INPUT PARAMETERS:  ======================================== 
+!OUTPUT PARAMETERS: ======================================== 
+!LOCAL VARIABLES:   ======================================== 
+  integer :: i,j,k
   real*8, dimension(1-ox:nx+ox,1-ox:ny+ox,nz) :: fZon
   real*8, dimension(1-ox:nx+ox,1-ox:ny+ox,nz) :: fMer
 
@@ -237,7 +262,7 @@ subroutine calc_pvdiff
     enddo
   enddo
   Gpv = Gpv + Gpvdif
-end subroutine calc_pvdiff
+end subroutine calc_pvdiff_old
 
 subroutine calc_pvadv
   use myqg_module
