@@ -24,7 +24,7 @@ program main
   call write_3d("XG        ", xu, (/ nx,  1,  1 /), -1)
   call write_3d("YG        ", yu, (/  1, ny,  1 /), -1)
   !call write_3d("RF        ", zu, (/  1,  1, nz /), -1)
-  call write_3d("RF        ", (/ zu(:), 0.d0 /), (/  1,  1, nz+1 /), -1)
+  call write_3d("RF        ", (/ zu(:), zu(nz)+Hk(nz) /), (/  1,  1, nz+1 /), -1)
 
   !call cyclic_exchange(pv)
   !call cyclic_exchange(forc)
@@ -96,13 +96,19 @@ program main
     !enddo
 
     ! calculate streamfunction
-    call absmax_element(1-ox,nx+ox,1-ox,ny+ox,nz,forc,tmpreal)
+    !call absmax_element(1-ox,nx+ox,1-ox,ny+ox,nz,forc,tmpreal)
     !write(*,*) "tmpreal = ", tmpreal 
     !write(*,*) "forc = ", forc(32,:,1)
     !if ( tstep == 2 ) then
     !  stop
     !endif
-    call solve_poisson_cg(1-ox, nx+ox, 1-ox, ny+ox, nz, forc, psi, max_itt, crit, est_error, doio)
+    call solve_poisson_cg(1-ox, nx+ox, 1-ox, ny+ox, nz, forc, psi, max_itt, crit, est_error, doio, tstep)
+    
+    ! apply boundary condition for psi
+    !psi(1-ox:1,:,:)   = 0.0
+    !psi(nx:nx+ox,:,:) = 0.0
+    !psi(:,1-ox:1,:)   = 0.0
+    !psi(:,ny:ny+ox,:) = 0.0
  
     ! calculate velocity
     call calc_curl_psi
@@ -202,8 +208,8 @@ subroutine calc_pvdiff
   do i=1,nx
     do j=1,ny
       do k=1,nz
-        Gpvdif(i,j,k) =   1.0/dx**2 * ( pvr(i+1,j,k) - 2.0*pvr(i,j,k) + pvr(i-1,j,k) ) & 
-                      & + 1.0/dy**2 * ( pvr(i,j+1,k) - 2.0*pvr(i,j,k) + pvr(i,j-1,k) )  
+        Gpvdif(i,j,k) =   diffPVh * (  1.0/dx**2 * ( pvr(i+1,j,k) - 2.0*pvr(i,j,k) + pvr(i-1,j,k) ) & 
+                      &              + 1.0/dy**2 * ( pvr(i,j+1,k) - 2.0*pvr(i,j,k) + pvr(i,j-1,k) ) ) 
       enddo
     enddo
   enddo

@@ -1,6 +1,6 @@
 
 
-subroutine solve_poisson_cg(is,ie,js,je,nz,forc,sol,max_itt,crit, est_error, doio)
+subroutine solve_poisson_cg(is,ie,js,je,nz,forc,sol,max_itt,crit, est_error, doio, tstep)
   !use myqg_module
   implicit none
 !INPUT PARAMETERS:  ======================================== 
@@ -10,6 +10,7 @@ subroutine solve_poisson_cg(is,ie,js,je,nz,forc,sol,max_itt,crit, est_error, doi
   integer, intent(in)                         :: max_itt       
   real*8, intent(in)                          :: crit
   logical, intent(in)                         :: doio
+  integer, intent(in)                         :: tstep
 !UPDATE PARAMETERS: ======================================== 
   ! INPUT   sol is used as initial guess
   ! OUTPUT: sol is calculated by inversion of forc
@@ -18,8 +19,8 @@ subroutine solve_poisson_cg(is,ie,js,je,nz,forc,sol,max_itt,crit, est_error, doi
   real*8, intent(out)                         :: est_error
 !LOCAL VARIABLES:   ======================================== 
   integer                                     :: i,j,k,n
-  !real*8, dimension(is:ie,js:je,3,3)          :: A
-  real*8, dimension(3,3,nz)                   :: A
+  !real*8, dimension(is:ie,js:je,3,3)          :: matA
+  real*8, dimension(3,3,nz,3)                 :: matA
   real*8, dimension(is:ie,js:je,nz)           :: res, d, z, h
   logical, save                               :: first=.true.
   real*8                                      :: alpha, beta
@@ -36,18 +37,18 @@ subroutine solve_poisson_cg(is,ie,js,je,nz,forc,sol,max_itt,crit, est_error, doi
 ! -------------------------------------------------------------------------------
 ! Numenclatura:
 ! -------------------------------------------------------------------------------
-! forc = A * sol    : Poisson equation
+! forc = matA * sol    : Poisson equation
 !
 ! sol:    iterative solution
-! A:      Laplace operator
+! matA:   Laplace operator
 ! forc:   inhomogenity in Poisson equation
-! res:    residual of solution: res = forc - A*sol 
+! res:    residual of solution: res = forc - matA*sol 
 !
 ! -------------------------------------------------------------------------------
 ! The Algorithm (after Wikipedia "CG-Verfahren"):
 ! -------------------------------------------------------------------------------
 ! Calculated once per iteration and than saved to save computational time:
-!   z       = A*d 
+!   z       = matA*d 
 ! Find new solution:
 !   alpha   = res*h / d*z
 !   sol_new = sol + alpha * d
@@ -66,12 +67,11 @@ subroutine solve_poisson_cg(is,ie,js,je,nz,forc,sol,max_itt,crit, est_error, doi
   !  call make_matrix(is,ie,js,je,A)
   !  first = .false.
   !endif
-  call make_matrix(is,ie,js,je,A)
-
+  call make_matrix(is,ie,js,je,matA)
 ! ----------------------------------------
 ! make preconditioned matrix C
 ! ----------------------------------------
-  call precond_mat(is,ie,js,je,nz,A,C)
+  call precond_mat(is,ie,js,je,nz,matA,C)
 
 ! ----------------------------------------
 ! initial guess
@@ -83,9 +83,10 @@ subroutine solve_poisson_cg(is,ie,js,je,nz,forc,sol,max_itt,crit, est_error, doi
 ! ----------------------------------------
 ! r0 = b - A*x0
 ! ----------------------------------------
-  call matrix_prod(is,ie,js,je,nz,A,sol,res)
+  call matrix_prod(is,ie,js,je,nz,matA,sol,res)
   !call cyclic_exchange_2d(res)  !?? no cyclic
   res = forc - res
+  !write(*,*) res(:,:,2)
 
 ! ----------------------------------------
 ! h0 = C*r0
@@ -113,7 +114,7 @@ subroutine solve_poisson_cg(is,ie,js,je,nz,forc,sol,max_itt,crit, est_error, doi
     ! ----------------------------------------
     ! z = A * d_k
     ! ----------------------------------------
-    call matrix_prod(is,ie,js,je,nz,A,d,z)
+    call matrix_prod(is,ie,js,je,nz,matA,d,z)
     !call cyclic_exchange_2d(z) !?? not necessary
 
     ! ----------------------------------------
@@ -184,7 +185,6 @@ subroutine solve_poisson_cg(is,ie,js,je,nz,forc,sol,max_itt,crit, est_error, doi
     d = h + beta * d
     !?? call cyclic_exchange_2d(d)
 
-
     ! ----------------------------------------
     ! calculate convergence
     ! ----------------------------------------
@@ -213,6 +213,9 @@ subroutine solve_poisson_cg(is,ie,js,je,nz,forc,sol,max_itt,crit, est_error, doi
       ! ----------------------------------------
       !if ( est_error .lt. crit )  goto 101    !success
       if ( resp1Tresp1/forcTforc .lt. 1.e-10 )  goto 101    !success
+
+      !! temp solution to survive first step
+      !if ( tstep == 2 .and. abs(sngl(est_error)) < 10. ) goto 101
     endif
       
   enddo ! end of iteration
@@ -226,56 +229,105 @@ subroutine solve_poisson_cg(is,ie,js,je,nz,forc,sol,max_itt,crit, est_error, doi
   stop
 
 ! success
-101 write(*,*) "Converged after n = ", n 
+!101 write(*,*) "Converged after n = ", n 
+101 return 
 
 end subroutine solve_poisson_cg
 
-subroutine make_matrix(is,ie,js,je,A)
+subroutine make_matrix(is,ie,js,je,matA)
   use myqg_module
   implicit none
 !INPUT PARAMETERS:  ======================================== 
   integer, intent(in)                         :: is,ie,js,je
   !real*8, intent(in)                          :: dx, dy
 !OUTPUT PARAMETERS: ======================================== 
-  !real*8, dimension(is:ie,js:je,3,3), intent(out):: A
-  real*8, dimension(3,3,nz), intent(out):: A
+  !real*8, dimension(is:ie,js:je,3,3), intent(out):: matA
+  real*8, dimension(3,3,nz,3), intent(out):: matA
 !LOCAL VARIABLES:   ======================================== 
   integer                                     :: i,j,k
-  A = 0.0
+  integer                                     :: ii,jj,kk
+
   !do j=js,je
   !  do i=is,ie
-      !A(i,j,1,2) =  1.0/dx**2
-      !A(i,j,3,2) =  1.0/dx**2
-      !A(i,j,2,2) = -2.0/dx**2-2.0/dy**2
-      !A(i,j,2,1) =  1.0/dy**2
-      !A(i,j,2,3) =  1.0/dy**2
+      !matA(i,j,1,2) =  1.0/dx**2
+      !matA(i,j,3,2) =  1.0/dx**2
+      !matA(i,j,2,2) = -2.0/dx**2-2.0/dy**2
+      !matA(i,j,2,1) =  1.0/dy**2
+      !matA(i,j,2,3) =  1.0/dy**2
   !  enddo
   !enddo
-
+  
+  matA=0.0
   do k=1,nz
-    A(1,2,k)   = A(1,2,k)   + 1.0/dx**2
-    A(2,2,k)   = A(2,2,k)   - 2.0/dx**2
-    A(3,2,k)   = A(3,2,k)   + 1.0/dx**2
+    matA(1,2,k,2)   = matA(1,2,k,2)   + 1.0/dx**2
+    matA(2,2,k,2)   = matA(2,2,k,2)   - 2.0/dx**2
+    matA(3,2,k,2)   = matA(3,2,k,2)   + 1.0/dx**2
 
-    A(2,1,k)   = A(2,1,k)   + 1.0/dy**2
-    A(2,2,k)   = A(2,2,k)   - 2.0/dy**2
-    A(2,3,k)   = A(2,3,k)   + 1.0/dy**2
+    matA(2,1,k,2)   = matA(2,1,k,2)   + 1.0/dy**2
+    matA(2,2,k,2)   = matA(2,2,k,2)   - 2.0/dy**2
+    matA(2,3,k,2)   = matA(2,3,k,2)   + 1.0/dy**2
 
     if ( k > 1 .and. k < nz ) then
-      A(2,2,k-1) = A(2,2,k-1) + f0**2/Hk(k)*(1.0/gred(k))
-      A(2,2,k)   = A(2,2,k)   - f0**2/Hk(k)*(1.0/gred(k)+1.0/gred(k+1)) 
-      A(2,2,k+1) = A(2,2,k+1) + f0**2/Hk(k)*(1.0/gred(k+1))
+      write(*,*) Hk(k)
+      matA(2,2,k,1) = matA(2,2,k,1) + f0**2/Hk(k)*(1.0/gred(k))
+      matA(2,2,k,2) = matA(2,2,k,2) - f0**2/Hk(k)*(1.0/gred(k)+1.0/gred(k+1)) 
+      matA(2,2,k,3) = matA(2,2,k,3) + f0**2/Hk(k)*(1.0/gred(k+1))
     elseif ( k == 1 ) then
-      !A(2,2,k-1) = A(2,2,k-1) + f0**2/Hk(k)*(1.0/gred(k))
-      A(2,2,k)   = A(2,2,k)   - f0**2/Hk(k)*(1.0/gred(k)+1.0/gred(k+1)) 
-      A(2,2,k+1) = A(2,2,k+1) + f0**2/Hk(k)*(1.0/gred(k+1))
+      write(*,*) Hk(k)
+      matA(2,2,k,2) = matA(2,2,k,2) - f0**2/Hk(k)*(1.0/gred(k)+1.0/gred(k+1)) 
+      matA(2,2,k,3) = matA(2,2,k,3) + f0**2/Hk(k)*(1.0/gred(k+1))
+      !matA(2,2,k,2) = matA(2,2,k,2) - f0**2/500.*(1.0/gred(k)+1.0/gred(k+1)) 
+      !matA(2,2,k,3) = matA(2,2,k,3) + f0**2/500.*(1.0/gred(k+1))
     elseif ( k == nz ) then
-      A(2,2,k-1) = A(2,2,k-1) + f0**2/Hk(k)*(1.0/gred(k))
-      A(2,2,k)   = A(2,2,k)   - f0**2/Hk(k)*(1.0/gred(k)) 
-      !A(2,2,k+1) = A(2,2,k+1) + f0**2/Hk(k)*(1.0/gred(k+1))
+      write(*,*) Hk(k)
+      matA(2,2,k,1) = matA(2,2,k,1) + f0**2/Hk(k)*(1.0/gred(k))
+      matA(2,2,k,2) = matA(2,2,k,2) - f0**2/Hk(k)*(1.0/gred(k)) 
+      !matA(2,2,k,1) = matA(2,2,k,1) + f0**2/500.*(1.0/gred(k))
+      !matA(2,2,k,2) = matA(2,2,k,2) - f0**2/500.*(1.0/gred(k)) 
     endif
+    
+    !!if ( k > 1 .and. k < nz ) then
+    !!  matA(2,2,k-1,0) = matA(2,2,k-1,0) + f0**2/Hk(k)*(1.0/gred(k))
+    !!  matA(2,2,k,0)   = matA(2,2,k,0)   - f0**2/Hk(k)*(1.0/gred(k)+1.0/gred(k+1)) 
+    !!  matA(2,2,k+1,0) = matA(2,2,k+1,0) + f0**2/Hk(k)*(1.0/gred(k+1))
+    !!elseif ( k == 1 ) then
+    !!  !matA(2,2,k-1,0) = matA(2,2,k-1,0) + f0**2/Hk(k)*(1.0/gred(k))
+    !!  matA(2,2,k,0)   = matA(2,2,k,0)   - f0**2/Hk(k)*(1.0/gred(k)+1.0/gred(k+1)) 
+    !!  matA(2,2,k+1,0) = matA(2,2,k+1,0) + f0**2/Hk(k)*(1.0/gred(k+1))
+    !!elseif ( k == nz ) then
+    !!  matA(2,2,k-1,0) = matA(2,2,k-1,0) + f0**2/Hk(k)*(1.0/gred(k))
+    !!  matA(2,2,k,0)   = matA(2,2,k,0)   - f0**2/Hk(k)*(1.0/gred(k)) 
+    !!  !matA(2,2,k+1,0) = matA(2,2,k+1,0) + f0**2/Hk(k)*(1.0/gred(k+1))
+    !!endif
+    !if ( k > 1 .and. k < nz ) then
+    !  matA(2,2,k-1) = matA(2,2,k-1) + f0**2/Hk(k)*(1.0/gred(k-1))
+    !  matA(2,2,k)   = matA(2,2,k)   - f0**2/Hk(k)*(1.0/gred(k-1)+1.0/gred(k)) 
+    !  matA(2,2,k+1) = matA(2,2,k+1) + f0**2/Hk(k)*(1.0/gred(k))
+    !elseif ( k == 1 ) then
+    !  !matA(2,2,k-1) = matA(2,2,k-1) + f0**2/Hk(k)*(1.0/gred(k-1))
+    !  matA(2,2,k)   = matA(2,2,k)   - f0**2/Hk(k)*(1.0/grav+1.0/gred(k)) 
+    !  matA(2,2,k+1) = matA(2,2,k+1) + f0**2/Hk(k)*(1.0/gred(k))
+    !elseif ( k == nz ) then
+    !  matA(2,2,k-1) = matA(2,2,k-1) + f0**2/Hk(k)*(1.0/gred(k-1))
+    !  matA(2,2,k)   = matA(2,2,k)   - f0**2/Hk(k)*(1.0/gred(k-1)) 
+    !  !matA(2,2,k+1) = matA(2,2,k+1) + f0**2/Hk(k)*(1.0/gred(k+1))
+    !endif
   enddo
 
+  !!!!!do k=1,nz
+  !!!!!  do ii=1,3
+  !!!!!    do jj=1,3
+  !!!!!      do kk=1,3
+  !!!!!        write(*,*) 'ii, jj, k, kk ', ii, jj, k, kk
+  !!!!!        write(*,*) matA(ii,jj,k,kk)
+  !!!!!      enddo
+  !!!!!    enddo
+  !!!!!  enddo
+  !!!!!enddo
+  !!!!!  write(*,*) '_____________________________________________________'
+  !!!!!  write(*,*) 'tstep = ', tstep
+  !!!!!  !write(*,*) pvr(:,:,1)
+  !!!!!  write(*,*) '_____________________________________________________'
 end subroutine make_matrix
 
 subroutine scalar_prod(is,ie,js,je,nz,p1,p2,sprod)
@@ -298,39 +350,72 @@ subroutine scalar_prod(is,ie,js,je,nz,p1,p2,sprod)
   enddo
 end subroutine scalar_prod
 
-subroutine matrix_prod(is,ie,js,je,nz,A,d,z)
+subroutine matrix_prod(is,ie,js,je,nz,matA,d,z)
   !use myqg_module
   implicit none
 !INPUT PARAMETERS:  ======================================== 
   integer, intent(in)                         :: is,ie,js,je,nz
   real*8, dimension(is:ie,js:je,nz), intent(in)  :: d
-  !real*8, dimension(is:ie,js:je,3,3), intent(out) :: A
-  real*8, dimension(3,3,nz), intent(out) :: A
+  !real*8, dimension(is:ie,js:je,3,3), intent(out) :: matA
+  real*8, dimension(3,3,nz,3), intent(in) :: matA
 !OUTPUT PARAMETERS: ======================================== 
   real*8, dimension(is:ie,js:je,nz), intent(out) :: z
 !LOCAL VARIABLES:   ======================================== 
-  integer                                     :: i, j, k, ii, jj
+  integer                                     :: i, j, k, ii, jj, kk
+  integer                                     :: k1, k2
   z = 0.0
-  do j=js+1,je-1
-    do i=is+1,ie-1
-      do k=1,nz
+  !do j=js+1,je-1
+  !  do i=is+1,ie-1
+  !    do k=1,nz
+  !      do ii = -1,1
+  !        do jj = -1,1
+  !          !z(i,j) = z(i,j) + matA(i,j,ii+2,jj+2)*d(i+ii,j+jj)
+  !          z(i,j,k) = z(i,j,k) + matA(ii+2,jj+2,k)*d(i+ii,j+jj,k)
+  !        enddo
+  !      enddo
+  !    enddo
+  !  enddo
+  !enddo
+
+  do k=1,nz
+    if ( k==1 ) then
+      k1 =  0
+      k2 =  1
+    elseif ( k==nz ) then
+      k1 = -1
+      k2 =  0
+    else
+      k1 = -1
+      k2 =  1
+    endif
+    do j=js+1,je-1
+      do i=is+1,ie-1
         do ii = -1,1
           do jj = -1,1
-            !z(i,j) = z(i,j) + A(i,j,ii+2,jj+2)*d(i+ii,j+jj)
-            z(i,j,k) = z(i,j,k) + A(ii+2,jj+2,k)*d(i+ii,j+jj,k)
+            do kk = k1,k2
+              z(i,j,k) = z(i,j,k) + matA(ii+2,jj+2,k,kk+2)*d(i+ii,j+jj,k+kk)
+              !z(i,j,k) = z(i,j,k) + matA(ii+2,jj+2,k,2)*d(i+ii,j+jj,k)
+            enddo
           enddo
         enddo
+        !do kk = k1,k2
+        !  if ( i==10 .and. j==10) then
+        !    write(*,*) 'k = ',k, ', kk = ', kk
+        !    write(*,*) matA(2,2,k,kk+2)
+        !  endif
+        !  z(i,j,k) = z(i,j,k) + matA(2,2,k,kk+2)*d(i,j,k+kk)
+        !enddo
       enddo
     enddo
   enddo
 end subroutine matrix_prod
 
-subroutine precond_mat(is,ie,js,je,nz,A,C)
+subroutine precond_mat(is,ie,js,je,nz,matA,C)
   implicit none
 !INPUT PARAMETERS:  ======================================== 
   integer, intent(in)                         :: is,ie,js,je,nz
-  !real*8, dimension(is:ie,js:je,3,3), intent(in):: A
-  real*8, dimension(3,3,nz), intent(in):: A
+  !real*8, dimension(is:ie,js:je,3,3), intent(in):: matA
+  real*8, dimension(3,3,nz,3), intent(in):: matA
 !OUTPUT PARAMETERS: ======================================== 
   real*8, dimension(is:ie,js:je,nz), intent(out):: C
 !LOCAL VARIABLES:   ======================================== 
@@ -340,19 +425,19 @@ subroutine precond_mat(is,ie,js,je,nz,A,C)
   do j=js,je
     do i=is,ie
       do k=1,nz
-        !C(i,j) = A(i,j,2,2)
-        C(i,j,k) = A(2,2,k)
+        !C(i,j) = matA(i,j,2,2)
+        C(i,j,k) = matA(2,2,k,2)
       enddo
     enddo
   enddo
-  ! invert A
+  ! invert matA
   do j=js,je
     do i=is,ie
       do k=1,nz
         if ( C(i,j,k) .ne. 0.0 ) then
-          C(i,j,k) = 1/C(i,j,k)
-        else
-          C(i,j,k) = 0.0
+          C(i,j,k) = 1./C(i,j,k)
+        !else
+        !  C(i,j,k) = 0.0
         endif
       enddo
     enddo

@@ -2,7 +2,7 @@
 #setup = setup_one_eddy
 setup = setup_double_gyre
 F90 = gfortran
-F90FLAGS = 
+F90FLAGS = -g -Wall
 
 #$(F90) $(F90FLAGS) myqg_module.o solve_poisson_cg.o myqg.o
 all: clean \
