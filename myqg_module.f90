@@ -43,6 +43,8 @@ module myqg_module
   !real*8  :: crit=0.1
   real*8  :: crit=1e-12       ! pyOM value
   real*8  :: est_error
+  real*8, allocatable, dimension(:,:,:,:)   :: matA
+  real*8, allocatable, dimension(:,:,:)     :: C 
 
 ! mpi parameters
   integer :: numpr
@@ -118,5 +120,8 @@ subroutine allocate_myqg_module
   allocate( wek(1-ox:nx+ox,1-ox:ny+ox) );                                       wek=0
 
   allocate( rho(nz), gred(nz), Hk(nz) );                                        rho=0; gred=0; Hk=0;
+
+  allocate( matA(3,3,nz,3) );                                        matA=0;
+  allocate( C(1-ox:nx+ox,1-ox:ny+ox,nz) );                           C=0;
 
 end subroutine allocate_myqg_module

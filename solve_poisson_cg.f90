@@ -1,6 +1,6 @@
 
 
-subroutine solve_poisson_cg(is,ie,js,je,nz,forc,sol,max_itt,crit, est_error, doio, tstep)
+subroutine solve_poisson_cg(is,ie,js,je,nz,forc,sol,max_itt,crit, est_error, doio, tstep, matA, C)
   !use myqg_module
   implicit none
 !INPUT PARAMETERS:  ======================================== 
@@ -11,6 +11,8 @@ subroutine solve_poisson_cg(is,ie,js,je,nz,forc,sol,max_itt,crit, est_error, doi
   real*8, intent(in)                          :: crit
   logical, intent(in)                         :: doio
   integer, intent(in)                         :: tstep
+  real*8, dimension(3,3,nz,3), intent(in)     :: matA
+  real*8, dimension(is:ie,js:je,nz,3), intent(in) :: C 
 !UPDATE PARAMETERS: ======================================== 
   ! INPUT   sol is used as initial guess
   ! OUTPUT: sol is calculated by inversion of forc
@@ -19,14 +21,12 @@ subroutine solve_poisson_cg(is,ie,js,je,nz,forc,sol,max_itt,crit, est_error, doi
   real*8, intent(out)                         :: est_error
 !LOCAL VARIABLES:   ======================================== 
   integer                                     :: i,j,k,n
-  !real*8, dimension(is:ie,js:je,3,3)          :: matA
-  real*8, dimension(3,3,nz,3)                 :: matA
   real*8, dimension(is:ie,js:je,nz)           :: res, d, z, h
   logical, save                               :: first=.true.
   real*8                                      :: alpha, beta
   real*8                                      :: resTh, resp1Thp1, dTz, resp1Tresp1
   real*8                                      :: forcTforc 
-  real*8, dimension(is:ie,js:je,nz)           :: C
+  !real*8, dimension(is:ie,js:je,nz)           :: C
   real*8                                      :: dmax, hmax, beta_min
   real*8                                      :: convergence_rate
   real*8                                      :: maximprovement, maximprovement1
@@ -61,17 +61,20 @@ subroutine solve_poisson_cg(is,ie,js,je,nz,forc,sol,max_itt,crit, est_error, doi
 !   d_new   = h_new + beta * d
 
 ! ----------------------------------------
+! only needed once at the beginning 
+! ----------------------------------------
+  if ( first) then
+! ----------------------------------------
 ! make coefficient matrix A
 ! ----------------------------------------
-  !if ( first) then
-  !  call make_matrix(is,ie,js,je,A)
-  !  first = .false.
-  !endif
-  call make_matrix(is,ie,js,je,matA)
+    call make_matrix
 ! ----------------------------------------
 ! make preconditioned matrix C
 ! ----------------------------------------
-  call precond_mat(is,ie,js,je,nz,matA,C)
+    call precond_mat(is,ie,js,je)
+    first = .false.
+  endif
+  !call make_matrix(matA)
 
 ! ----------------------------------------
 ! initial guess
@@ -234,15 +237,15 @@ subroutine solve_poisson_cg(is,ie,js,je,nz,forc,sol,max_itt,crit, est_error, doi
 
 end subroutine solve_poisson_cg
 
-subroutine make_matrix(is,ie,js,je,matA)
+subroutine make_matrix
   use myqg_module
   implicit none
 !INPUT PARAMETERS:  ======================================== 
-  integer, intent(in)                         :: is,ie,js,je
+  !integer, intent(in)                         :: is,ie,js,je
   !real*8, intent(in)                          :: dx, dy
 !OUTPUT PARAMETERS: ======================================== 
   !real*8, dimension(is:ie,js:je,3,3), intent(out):: matA
-  real*8, dimension(3,3,nz,3), intent(out):: matA
+  !real*8, dimension(3,3,nz,3), intent(out):: matA
 !LOCAL VARIABLES:   ======================================== 
   integer                                     :: i,j,k
   integer                                     :: ii,jj,kk
@@ -268,18 +271,15 @@ subroutine make_matrix(is,ie,js,je,matA)
     matA(2,3,k,2)   = matA(2,3,k,2)   + 1.0/dy**2
 
     if ( k > 1 .and. k < nz ) then
-      write(*,*) Hk(k)
       matA(2,2,k,1) = matA(2,2,k,1) + f0**2/Hk(k)*(1.0/gred(k))
       matA(2,2,k,2) = matA(2,2,k,2) - f0**2/Hk(k)*(1.0/gred(k)+1.0/gred(k+1)) 
       matA(2,2,k,3) = matA(2,2,k,3) + f0**2/Hk(k)*(1.0/gred(k+1))
     elseif ( k == 1 ) then
-      write(*,*) Hk(k)
       matA(2,2,k,2) = matA(2,2,k,2) - f0**2/Hk(k)*(1.0/gred(k)+1.0/gred(k+1)) 
       matA(2,2,k,3) = matA(2,2,k,3) + f0**2/Hk(k)*(1.0/gred(k+1))
       !matA(2,2,k,2) = matA(2,2,k,2) - f0**2/500.*(1.0/gred(k)+1.0/gred(k+1)) 
       !matA(2,2,k,3) = matA(2,2,k,3) + f0**2/500.*(1.0/gred(k+1))
     elseif ( k == nz ) then
-      write(*,*) Hk(k)
       matA(2,2,k,1) = matA(2,2,k,1) + f0**2/Hk(k)*(1.0/gred(k))
       matA(2,2,k,2) = matA(2,2,k,2) - f0**2/Hk(k)*(1.0/gred(k)) 
       !matA(2,2,k,1) = matA(2,2,k,1) + f0**2/500.*(1.0/gred(k))
@@ -393,16 +393,16 @@ subroutine matrix_prod(is,ie,js,je,nz,matA,d,z)
         do ii = -1,1
           do jj = -1,1
             do kk = k1,k2
+              !if ( i==10 .and. j==10 ) then
+              !  write(*,*) 'i,j,k,ii,jj,kk', i,j,k,ii,jj,kk
+              !  write(*,*) matA(ii+2,jj+2,k,kk+2)*d(i+ii,j+jj,k+kk)
+              !endif
               z(i,j,k) = z(i,j,k) + matA(ii+2,jj+2,k,kk+2)*d(i+ii,j+jj,k+kk)
               !z(i,j,k) = z(i,j,k) + matA(ii+2,jj+2,k,2)*d(i+ii,j+jj,k)
             enddo
           enddo
         enddo
         !do kk = k1,k2
-        !  if ( i==10 .and. j==10) then
-        !    write(*,*) 'k = ',k, ', kk = ', kk
-        !    write(*,*) matA(2,2,k,kk+2)
-        !  endif
         !  z(i,j,k) = z(i,j,k) + matA(2,2,k,kk+2)*d(i,j,k+kk)
         !enddo
       enddo
@@ -410,14 +410,16 @@ subroutine matrix_prod(is,ie,js,je,nz,matA,d,z)
   enddo
 end subroutine matrix_prod
 
-subroutine precond_mat(is,ie,js,je,nz,matA,C)
+subroutine precond_mat(is,ie,js,je)
+  use myqg_module
   implicit none
 !INPUT PARAMETERS:  ======================================== 
-  integer, intent(in)                         :: is,ie,js,je,nz
+  integer, intent(in)                         :: is,ie,js,je
+  !integer, intent(in)                         :: nz
   !real*8, dimension(is:ie,js:je,3,3), intent(in):: matA
-  real*8, dimension(3,3,nz,3), intent(in):: matA
+  !real*8, dimension(3,3,nz,3), intent(in):: matA
 !OUTPUT PARAMETERS: ======================================== 
-  real*8, dimension(is:ie,js:je,nz), intent(out):: C
+  !real*8, dimension(is:ie,js:je,nz), intent(out):: C
 !LOCAL VARIABLES:   ======================================== 
   integer                                     :: i,j,k
   C=0.0

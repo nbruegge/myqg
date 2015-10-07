@@ -4,7 +4,7 @@ subroutine initialize_setup
 
 !LOCAL VARIABLES:   ======================================== 
   integer :: i,j,k,l,n
-  real*8, allocatable, dimension(:,:,:,:) :: matA
+  !real*8, allocatable, dimension(:,:,:,:) :: matA
   real*8  :: d, r
   integer :: nt 
   real*8  :: Lb, Lek
@@ -26,7 +26,7 @@ subroutine initialize_setup
   path_data = "/Users/nbruggemann/work/test_myqg/"
 
   call allocate_myqg_module
-  allocate( matA(3,3,nz,3) ); matA=0.0
+  !allocate( matA(3,3,nz,3) ); matA=0.0
 
   Lb = 1920.0e3
   Lx = 2.0*Lb
@@ -66,11 +66,11 @@ subroutine initialize_setup
   rho(1)  = 1000.
   
   ! time stepping
-  nt      = 10
+  nt      = 100
   !nt      = 1
   !dt      = 1200.
-  !dt      = 86400.
-  dt      = 1200.
+  dt      = 86400./10.
+  !dt      = 3*1200.
   tstep   = 0
   t_start = dt * tstep
   time    = t_start
@@ -81,7 +81,8 @@ subroutine initialize_setup
   !diffPVh = dx**2/dt/4.0
   ! beta v = - Ah v_xxx
   ! beta   = Ah / delata**3
-  diffPVh = beta * ( 4*dx )**3
+  diffPVh = beta * ( 2*dx )**3
+  !diffPVh = 10
 
   write(*,*) "dx = ", dx, "dy = ", dy
   write(*,*) "gred = ", gred
@@ -111,7 +112,7 @@ subroutine initialize_setup
   do j=1-ox,ny+ox
     do i=1-ox,nx+ox
       !wek(i,j) = - pi*tau0/(rho(1)*f0*Lek) * sin(pi*(Lek+yu(j))/Lek)
-      wek(i,j) = - tau0/(rho(1)*f0) * 2*pi/Ly * sin(2*pi*yu(j)/Ly)
+      wek(i,j) = - tau0/(rho(1)*f0) * 2*pi/(Ly-dy) * sin(2*pi*yu(j)/(Ly-dy))
     enddo
   enddo
 
@@ -153,7 +154,7 @@ subroutine initialize_setup
 
   ! calculate initial relative vorticity from streamfunction
   tstep = 0
-  call make_matrix(1-ox, nx+ox, 1-ox, ny+ox, matA)
+  call make_matrix
   call matrix_prod(1-ox, nx+ox, 1-ox, ny+ox, nz, matA, psi, pv)
   !call solve_poisson_cg(1-ox, nx+ox, 1-ox, ny+ox, nz, pv,   hpr, max_itt, crit, est_error, doio)
   
