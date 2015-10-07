@@ -42,8 +42,12 @@ module myqg_module
   integer :: max_itt=1000     ! pyOM value
   !real*8  :: crit=0.1
   real*8  :: crit=1e-12       ! pyOM value
+  !real*8  :: crit=1e-4       ! Carsten's qg_model value
   real*8  :: est_error
   real*8, allocatable, dimension(:,:,:,:)   :: matA
+  real*8, allocatable, dimension(:,:,:,:)   :: matRelx
+  real*8, allocatable, dimension(:,:,:,:)   :: matRely
+  real*8, allocatable, dimension(:,:,:,:)   :: matStr
   real*8, allocatable, dimension(:,:,:)     :: C 
 
 ! mpi parameters
@@ -122,6 +126,9 @@ subroutine allocate_myqg_module
   allocate( rho(nz), gred(nz), Hk(nz) );                                        rho=0; gred=0; Hk=0;
 
   allocate( matA(3,3,nz,3) );                                        matA=0;
+  allocate( matRelx(3,3,nz,3) );                                     matRelx=0;
+  allocate( matRely(3,3,nz,3) );                                     matRely=0;
+  allocate( matStr(3,3,nz,3) );                                      matStr=0;
   allocate( C(1-ox:nx+ox,1-ox:ny+ox,nz) );                           C=0;
 
 end subroutine allocate_myqg_module

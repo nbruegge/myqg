@@ -35,39 +35,48 @@ subroutine initialize_setup
   dx  = Lx/nx
   dy  = Ly/ny 
 
-  f0     = 1e-4
-  beta   = 2.e-11
-  rho(1) = 1000.
+  f0    = 1e-4
+  beta  = 2.e-11
 
-!  ! three layer example (use nz=3)
+  ! three layer example (use nz=3)
 !  Hk(1)   =  250.0
 !  Hk(2)   =  750.0
 !  Hk(3)   = 1000.0
 !  R2      = 40.0e3
 !  R3      = 23.0e3
+!  ! Lr = N H / f
+!  ! R1 = sqrt( -g/rho_0*(rho(1)-rho(2))/(zt(1)-zt(2)) ) * Hk(1) / f0
+!  ! R1 = ( gred(k)*Hk(k) )**0.5 / f0
 !  rho(1)  = 1000.
 !  gred(1) = 10.
 !  gred(2) = (R2*f0)**2 / Hk(2)
 !  gred(3) = (R3*f0)**2 / Hk(3)
+! ! do k=2,nz
+! !   rho(k) = rho(k-1) + 10.0
+! !   gred(k) = gred(1)/rho(1) * (rho(k) - rho(k-1))
+! ! enddo
 
 ! two layer example (use nz=2)
-  Hk(1)   = 400.
-  Hk(2)   = 600.
+  tmpreal = 0.
+  Hk(1)   = 500.
+  Hk(2)   = 500.+tmpreal
   gred(1) = 10.
-  !gred(2) = 10. 
   gred(2) = 0.02 
-
+  !gred(2) = 10. 
+  rho(1)  = 1000.
+  
   ! time stepping
   nt      = 500
   !nt      = 1
   !dt      = 1200.
   dt      = 86400./10.
+  !dt      = 3*1200.
   tstep   = 0
   t_start = dt * tstep
   time    = t_start
   t_end   = dt * nt
-  timeio        = t_end / 10. 
-  time_monitor  = t_end / 10.
+  timeio        = t_end / 20. 
+  time_monitor  = t_end / 20.
 
   !diffPVh = dx**2/dt/4.0
   ! beta v = - Ah v_xxx
@@ -154,8 +163,8 @@ subroutine initialize_setup
   do j=1-ox,ny+ox
     do i=1-ox,nx+ox
       do k=1,nz
-        pv(i,j,k) = pv(i,j,k) + Hk(k)*beta * yu(j) 
-        pvp(i,j,k) = pvp(i,j,k) + Hk(k)*beta * yu(j)
+        pv(i,j,k) = pv(i,j,k) + beta * yu(j) 
+        pvp(i,j,k) = pvp(i,j,k) + beta * yu(j)
         !pv(i,j,k) = pv(i,j,k) + fCoru(j) 
       enddo
     enddo

@@ -61,7 +61,8 @@ program main
     forc = pvr
 
     ! calculate streamfunction
-    call solve_poisson_cg(1-ox, nx+ox, 1-ox, ny+ox, nz, forc, psi, max_itt, crit, est_error, doio, tstep, matA, C)
+    call solve_poisson_cg(1-ox, nx+ox, 1-ox, ny+ox, nz, forc, psi, max_itt, crit, est_error, &
+      & doio, tstep, matA, matRelx, matRely, matStr, C)
     
     ! apply boundary condition for psi
     !psi(1-ox:1,:,:)   = 0.0
@@ -187,9 +188,12 @@ subroutine calc_ekman_pumping
   Gpvfor = 0.0 
   do i=1,nx
     do j=1,ny
-      Gpvfor(i,j,1)  = Gpvfor(i,j,1) + ( &
-                  & f0/Hk(1) * wek(i,j) & 
-                  & )
+      !Gpvfor(i,j,1)  = Gpvfor(i,j,1) + ( &
+      !            !& f0/Hk(1) * wek(i,j) & 
+      !            & f0 * wek(i,j) & 
+      !            & )
+      !Gpvfor(i,j,1)  = Gpvfor(i,j,1) + ( f0/Hk(1) * wek(i,j) )
+      Gpvfor(i,j,1)  = Gpvfor(i,j,1) + ( f0 * wek(i,j) )
     enddo
   enddo
   Gpv = Gpv + Gpvfor

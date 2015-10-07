@@ -1,6 +1,6 @@
 
 
-subroutine solve_poisson_cg(is,ie,js,je,nz,forc,sol,max_itt,crit, est_error, doio, tstep, matA, C)
+subroutine solve_poisson_cg(is,ie,js,je,nz,forc,sol,max_itt,crit, est_error, doio, tstep, matA, matRelx, matRely, matStr, C)
   !use myqg_module
   implicit none
 !INPUT PARAMETERS:  ======================================== 
@@ -12,6 +12,9 @@ subroutine solve_poisson_cg(is,ie,js,je,nz,forc,sol,max_itt,crit, est_error, doi
   logical, intent(in)                         :: doio
   integer, intent(in)                         :: tstep
   real*8, dimension(3,3,nz,3), intent(in)     :: matA
+  real*8, dimension(3,3,nz,3), intent(in)     :: matRelx
+  real*8, dimension(3,3,nz,3), intent(in)     :: matRely
+  real*8, dimension(3,3,nz,3), intent(in)     :: matStr
   real*8, dimension(is:ie,js:je,nz,3), intent(in) :: C 
 !UPDATE PARAMETERS: ======================================== 
   ! INPUT   sol is used as initial guess
@@ -86,7 +89,7 @@ subroutine solve_poisson_cg(is,ie,js,je,nz,forc,sol,max_itt,crit, est_error, doi
 ! ----------------------------------------
 ! r0 = b - A*x0
 ! ----------------------------------------
-  call matrix_prod(is,ie,js,je,nz,matA,sol,res)
+  call matrix_prod(is,ie,js,je,nz,matA,matRelx,matRely,matStr,sol,res)
   !call cyclic_exchange_2d(res)  !?? no cyclic
   res = forc - res
   !write(*,*) res(:,:,2)
@@ -117,7 +120,7 @@ subroutine solve_poisson_cg(is,ie,js,je,nz,forc,sol,max_itt,crit, est_error, doi
     ! ----------------------------------------
     ! z = A * d_k
     ! ----------------------------------------
-    call matrix_prod(is,ie,js,je,nz,matA,d,z)
+    call matrix_prod(is,ie,js,je,nz,matA,matRelx,matRely,matStr,d,z)
     !call cyclic_exchange_2d(z) !?? not necessary
 
     ! ----------------------------------------
@@ -216,9 +219,9 @@ subroutine solve_poisson_cg(is,ie,js,je,nz,forc,sol,max_itt,crit, est_error, doi
       ! ----------------------------------------
       !if ( est_error .lt. crit )  goto 101    !success
       if ( resp1Tresp1/forcTforc .lt. 1.e-10 )  goto 101    !success
+      !if ( resp1Tresp1/forcTforc .lt. 1.e-27 )  goto 101    !success
+      !if ( n > 150 ) goto 101
 
-      !! temp solution to survive first step
-      !if ( tstep == 2 .and. abs(sngl(est_error)) < 10. ) goto 101
     endif
       
   enddo ! end of iteration
@@ -250,40 +253,29 @@ subroutine make_matrix
   integer                                     :: i,j,k
   integer                                     :: ii,jj,kk
 
-  !do j=js,je
-  !  do i=is,ie
-      !matA(i,j,1,2) =  1.0/dx**2
-      !matA(i,j,3,2) =  1.0/dx**2
-      !matA(i,j,2,2) = -2.0/dx**2-2.0/dy**2
-      !matA(i,j,2,1) =  1.0/dy**2
-      !matA(i,j,2,3) =  1.0/dy**2
-  !  enddo
-  !enddo
-  
   matA=0.0
+  matRelx=0.0
+  matRely=0.0
+  matStr=0.0
   do k=1,nz
-    matA(1,2,k,2)   = matA(1,2,k,2)   + 1.0/dx**2
-    matA(2,2,k,2)   = matA(2,2,k,2)   - 2.0/dx**2
-    matA(3,2,k,2)   = matA(3,2,k,2)   + 1.0/dx**2
+    matRelx(1,2,k,2)   = matRelx(1,2,k,2)   + 1.0/dx**2 * Hk(k)
+    matRelx(2,2,k,2)   = matRelx(2,2,k,2)   - 2.0/dx**2 * Hk(k)
+    matRelx(3,2,k,2)   = matRelx(3,2,k,2)   + 1.0/dx**2 * Hk(k)
 
-    matA(2,1,k,2)   = matA(2,1,k,2)   + 1.0/dy**2
-    matA(2,2,k,2)   = matA(2,2,k,2)   - 2.0/dy**2
-    matA(2,3,k,2)   = matA(2,3,k,2)   + 1.0/dy**2
+    matRely(2,1,k,2)   = matRely(2,1,k,2)   + 1.0/dy**2 * Hk(k)
+    matRely(2,2,k,2)   = matRely(2,2,k,2)   - 2.0/dy**2 * Hk(k)
+    matRely(2,3,k,2)   = matRely(2,3,k,2)   + 1.0/dy**2 * Hk(k)
 
     if ( k > 1 .and. k < nz ) then
-      matA(2,2,k,1) = matA(2,2,k,1) + f0**2/Hk(k)*(1.0/gred(k))
-      matA(2,2,k,2) = matA(2,2,k,2) - f0**2/Hk(k)*(1.0/gred(k)+1.0/gred(k+1)) 
-      matA(2,2,k,3) = matA(2,2,k,3) + f0**2/Hk(k)*(1.0/gred(k+1))
+      matStr(2,2,k,1) = matStr(2,2,k,1) + f0**2*(1.0/gred(k))
+      matStr(2,2,k,2) = matStr(2,2,k,2) - f0**2*(1.0/gred(k)+1.0/gred(k+1))
+      matStr(2,2,k,3) = matStr(2,2,k,3) + f0**2*(1.0/gred(k+1))
     elseif ( k == 1 ) then
-      matA(2,2,k,2) = matA(2,2,k,2) - f0**2/Hk(k)*(1.0/gred(k)+1.0/gred(k+1)) 
-      matA(2,2,k,3) = matA(2,2,k,3) + f0**2/Hk(k)*(1.0/gred(k+1))
-      !matA(2,2,k,2) = matA(2,2,k,2) - f0**2/500.*(1.0/gred(k)+1.0/gred(k+1)) 
-      !matA(2,2,k,3) = matA(2,2,k,3) + f0**2/500.*(1.0/gred(k+1))
+      matStr(2,2,k,2) = matStr(2,2,k,2) - f0**2*(1.0/gred(k)+1.0/gred(k+1))
+      matStr(2,2,k,3) = matStr(2,2,k,3) + f0**2*(1.0/gred(k+1))
     elseif ( k == nz ) then
-      matA(2,2,k,1) = matA(2,2,k,1) + f0**2/Hk(k)*(1.0/gred(k))
-      matA(2,2,k,2) = matA(2,2,k,2) - f0**2/Hk(k)*(1.0/gred(k)) 
-      !matA(2,2,k,1) = matA(2,2,k,1) + f0**2/500.*(1.0/gred(k))
-      !matA(2,2,k,2) = matA(2,2,k,2) - f0**2/500.*(1.0/gred(k)) 
+      matStr(2,2,k,1) = matStr(2,2,k,1) + f0**2*(1.0/gred(k))
+      matStr(2,2,k,2) = matStr(2,2,k,2) - f0**2*(1.0/gred(k))
     endif
     
     !!if ( k > 1 .and. k < nz ) then
@@ -313,21 +305,7 @@ subroutine make_matrix
     !  !matA(2,2,k+1) = matA(2,2,k+1) + f0**2/Hk(k)*(1.0/gred(k+1))
     !endif
   enddo
-
-  !!!!!do k=1,nz
-  !!!!!  do ii=1,3
-  !!!!!    do jj=1,3
-  !!!!!      do kk=1,3
-  !!!!!        write(*,*) 'ii, jj, k, kk ', ii, jj, k, kk
-  !!!!!        write(*,*) matA(ii,jj,k,kk)
-  !!!!!      enddo
-  !!!!!    enddo
-  !!!!!  enddo
-  !!!!!enddo
-  !!!!!  write(*,*) '_____________________________________________________'
-  !!!!!  write(*,*) 'tstep = ', tstep
-  !!!!!  !write(*,*) pvr(:,:,1)
-  !!!!!  write(*,*) '_____________________________________________________'
+  matA = matRelx + matRely + matStr
 end subroutine make_matrix
 
 subroutine scalar_prod(is,ie,js,je,nz,p1,p2,sprod)
@@ -350,7 +328,7 @@ subroutine scalar_prod(is,ie,js,je,nz,p1,p2,sprod)
   enddo
 end subroutine scalar_prod
 
-subroutine matrix_prod(is,ie,js,je,nz,matA,d,z)
+subroutine matrix_prod(is,ie,js,je,nz,matA,matRelx,matRely,matStr,d,z)
   !use myqg_module
   implicit none
 !INPUT PARAMETERS:  ======================================== 
@@ -358,6 +336,9 @@ subroutine matrix_prod(is,ie,js,je,nz,matA,d,z)
   real*8, dimension(is:ie,js:je,nz), intent(in)  :: d
   !real*8, dimension(is:ie,js:je,3,3), intent(out) :: matA
   real*8, dimension(3,3,nz,3), intent(in) :: matA
+  real*8, dimension(3,3,nz,3), intent(in) :: matRelx
+  real*8, dimension(3,3,nz,3), intent(in) :: matRely
+  real*8, dimension(3,3,nz,3), intent(in) :: matStr
 !OUTPUT PARAMETERS: ======================================== 
   real*8, dimension(is:ie,js:je,nz), intent(out) :: z
 !LOCAL VARIABLES:   ======================================== 
@@ -390,21 +371,24 @@ subroutine matrix_prod(is,ie,js,je,nz,matA,d,z)
     endif
     do j=js+1,je-1
       do i=is+1,ie-1
-        do ii = -1,1
-          do jj = -1,1
-            do kk = k1,k2
-              !if ( i==10 .and. j==10 ) then
-              !  write(*,*) 'i,j,k,ii,jj,kk', i,j,k,ii,jj,kk
-              !  write(*,*) matA(ii+2,jj+2,k,kk+2)*d(i+ii,j+jj,k+kk)
-              !endif
-              z(i,j,k) = z(i,j,k) + matA(ii+2,jj+2,k,kk+2)*d(i+ii,j+jj,k+kk)
-              !z(i,j,k) = z(i,j,k) + matA(ii+2,jj+2,k,2)*d(i+ii,j+jj,k)
-            enddo
-          enddo
-        enddo
-        !do kk = k1,k2
-        !  z(i,j,k) = z(i,j,k) + matA(2,2,k,kk+2)*d(i,j,k+kk)
+        !do ii = -1,1
+        !  do jj = -1,1
+        !    !do kk = k1,k2
+        !      !z(i,j,k) = z(i,j,k) + matA(ii+2,jj+2,k,kk+2)*d(i+ii,j+jj,k+kk)
+        !      z(i,j,k) = z(i,j,k) + matRel(ii+2,jj+2,k,2)*d(i+ii,j+jj,k)
+        !    !enddo
+        !  enddo
         !enddo
+        do ii = -1,1
+          z(i,j,k) = z(i,j,k) + matRelx(ii+2,2,k,2)*d(i+ii,j,k)
+        enddo
+        do jj = -1,1
+          z(i,j,k) = z(i,j,k) + matRely(ii,jj+2,k,2)*d(i,j+jj,k)
+        enddo
+
+        do kk = k1,k2
+          z(i,j,k) = z(i,j,k) + matStr(2,2,k,kk+2)*d(i,j,k+kk)
+        enddo
       enddo
     enddo
   enddo
@@ -427,8 +411,8 @@ subroutine precond_mat(is,ie,js,je)
   do j=js,je
     do i=is,ie
       do k=1,nz
-        !C(i,j) = matA(i,j,2,2)
         C(i,j,k) = matA(2,2,k,2)
+        !C(i,j,k) = matRelx(2,2,k,2)+matRely(2,2,k,2)
       enddo
     enddo
   enddo
