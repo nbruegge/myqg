@@ -10,20 +10,23 @@ subroutine initialize_setup
   real*8  :: Lb, Lek
   real*8  :: R2, R3
   real*8  :: tau0
+  real*8  :: Ld  ! only for two layer
 
   character(len=20) :: fmtrea
   character(len=20) :: fmtint
 
   real*8 :: tmpreal
+  real*8 :: RES_HOR
 
 ! ================================================================================ 
 ! initialize model
 ! ================================================================================ 
-  nx = 64
-  ny = 64
+  RES_HOR = 1.
+  nx = 64*int(RES_HOR)
+  ny = 64*int(RES_HOR)
   nz = 2
   !path_data = "/scratch/uni/ifmto/u241161/myqg/test/"
-  path_data = "/Users/nbruggemann/work/test_myqg/"
+  path_data = "./"
 
   call allocate_myqg_module
   !allocate( matA(3,3,nz,3) ); matA=0.0
@@ -35,8 +38,8 @@ subroutine initialize_setup
   dx  = Lx/nx
   dy  = Ly/ny 
 
-  f0     = 1e-4
-  beta   = 2.e-11
+  f0     = 0.25e-4
+  beta   = 1.75e-11
   rho(1) = 1000.
 
 !  ! three layer example (use nz=3)
@@ -51,23 +54,27 @@ subroutine initialize_setup
 !  gred(3) = (R3*f0)**2 / Hk(3)
 
 ! two layer example (use nz=2)
-  Hk(1)   = 400.
-  Hk(2)   = 600.
+  Hk(1)   = 1500.
+  Hk(2)   = 1500.
   gred(1) = 10.
   !gred(2) = 10. 
-  gred(2) = 0.02 
+  !gred(2) = 0.02 
+  gred(2) = 0.3 
+
+  ! Rossby radius
+  Ld = ( (gred(2)*Hk(1)*Hk(2)) / ((Hk(1)+Hk(2))*f0**2) )**0.5
 
   ! time stepping
-  nt      = 500
+  nt      = 6*500 * int(RES_HOR)
   !nt      = 1
   !dt      = 1200.
-  dt      = 86400./10.
+  dt      = 86400./6. / RES_HOR
   tstep   = 0
   t_start = dt * tstep
   time    = t_start
   t_end   = dt * nt
-  timeio        = t_end / 10. 
-  time_monitor  = t_end / 10.
+  timeio        = 86400. 
+  time_monitor  = timeio
 
   !diffPVh = dx**2/dt/4.0
   ! beta v = - Ah v_xxx
@@ -183,8 +190,13 @@ subroutine initialize_setup
   write(20,fmtrea) "tau0    = ",tau0,";" 
   write(20,fmtrea) "diffPVh = ",diffPVh,";" 
   write(20,fmtint) ""
-  write(20,"(A,2ES14.8,A)") "gred = ",gred,";" 
-  write(20,"(A,2ES14.8,A)") "Hk = ",Hk,";" 
+  write(20,fmtrea) "gred_1 = ",gred(1),";" 
+  write(20,fmtrea) "gred_2 = ",gred(2),";" 
+  write(20,fmtrea) "Hk_1   = ",Hk(1),";" 
+  write(20,fmtrea) "Hk_2   = ",Hk(2),";" 
+  write(20,fmtrea) "Ld     = ",Ld,";" 
+  !write(20,"(A,2ES14.8,A)") "gred = ",gred,";" 
+  !write(20,"(A,2ES14.8,A)") "Hk = ",Hk,";" 
   close(20)
 
 
