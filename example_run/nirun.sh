@@ -9,7 +9,7 @@ path_act=`pwd`
 ##setup=`basename ${setup_file} .f90`
 
 # replace path_data variable in setup_file
-sed -e s,"  path_data.*","  path_data = \"${path_act}/\"",g ${setup_file}
+sed -i -e s,"  path_data.*","  path_data = \"${path_act}/\"",g ${setup_file}
 
 # cleaning up old run
 rm ferret.jnl* *.data *.meta pybintocdf.cdf

@@ -2,5 +2,6 @@
 
 #make
 
-~/work/test_myqg/niclear.sh
+~/work/test_myqg/nirun.sh
+
 #./a.out
