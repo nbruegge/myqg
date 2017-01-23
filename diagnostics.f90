@@ -29,6 +29,7 @@ subroutine diagnostics
 
     ! calculate velocity
     call calc_curl_psi
+    call calc_pv_components
     !call cyclic_exchange(u)
     !call cyclic_exchange(v)
 end subroutine diagnostics
@@ -56,21 +57,76 @@ subroutine calc_curl_psi
   enddo
 end subroutine calc_curl_psi
 
+subroutine calc_pv_components
+  !!! this should be the same function as in solve_posson_cg.f90/matrix_prod
+  use myqg_module
+  implicit none
+!INPUT PARAMETERS:  ======================================== 
+!!!  real*8, dimension(is:ie,js:je,nz), intent(in)  :: d
+  !real*8, dimension(is:ie,js:je,3,3), intent(out) :: matA
+!!!  real*8, dimension(3,3,nz,3), intent(in) :: matA
+!!!  real*8, dimension(3,3,nz,3), intent(in) :: matRelx
+!!!  real*8, dimension(3,3,nz,3), intent(in) :: matRely
+!!!  real*8, dimension(3,3,nz,3), intent(in) :: matStr
+!OUTPUT PARAMETERS: ======================================== 
+!  real*8, dimension(is:ie,js:je,nz), intent(out) :: pv_r, pv_s
+!LOCAL VARIABLES:   ======================================== 
+  integer                                     :: is,ie,js,je
+  integer                                     :: i, j, k, ii, jj, kk
+  integer                                     :: k1, k2
+  pv_r = 0.0
+  pv_s = 0.0
+  is = 1-ox
+  ie = nx+ox
+  js = 1-ox
+  je = ny+ox
+
+  do k=1,nz
+    if ( k==1 ) then
+      k1 =  0
+      k2 =  1
+    elseif ( k==nz ) then
+      k1 = -1
+      k2 =  0
+    else
+      k1 = -1
+      k2 =  1
+    endif
+    do j=js+1,je-1
+      do i=is+1,ie-1
+        do ii = -1,1
+          pv_r(i,j,k) = pv_r(i,j,k) + matRelx(ii+2,2,k,2)*psi(i+ii,j,k)
+        enddo
+        do jj = -1,1
+          pv_r(i,j,k) = pv_r(i,j,k) + matRely(ii,jj+2,k,2)*psi(i,j+jj,k)
+        enddo
+
+        do kk = k1,k2
+          pv_s(i,j,k) = pv_s(i,j,k) + matStr(2,2,k,kk+2)*psi(i,j,k+kk)
+        enddo
+      enddo
+    enddo
+  enddo
+end subroutine calc_pv_components
+
 subroutine write_snapshot
   use myqg_module
   implicit none
   write(*,*) "================================================================================"
   write(*,*) "Model I/O at tstep ", tstep
+  write(*,*) "  snap/all_snaps = ", int(time/timeio),'/', int(t_end/timeio)
   call write_3d('pv        ', pv (1:nx,1:ny,1:nz), (/ nx, ny, nz /), tstep)
   call write_3d('pvp       ', pvp(1:nx,1:ny,1:nz), (/ nx, ny, nz /), tstep)
   call write_3d('pvr       ', pvr(1:nx,1:ny,1:nz), (/ nx, ny, nz /), tstep)
+  call write_3d('pv_r      ', pv_r(1:nx,1:ny,1:nz), (/ nx, ny, nz /), tstep)
+  call write_3d('pv_s      ', pv_s(1:nx,1:ny,1:nz), (/ nx, ny, nz /), tstep)
   call write_3d('psi       ', psi(1:nx,1:ny,1:nz), (/ nx, ny, nz /), tstep)
-  call write_3d('u         ', u  (1:nx,1:ny,1:nz), (/ nx, ny, nz /), tstep)
-  call write_3d('v         ', v  (1:nx,1:ny,1:nz), (/ nx, ny, nz /), tstep)
+  !call write_3d('u         ', u  (1:nx,1:ny,1:nz), (/ nx, ny, nz /), tstep)
+  !call write_3d('v         ', v  (1:nx,1:ny,1:nz), (/ nx, ny, nz /), tstep)
   call write_3d('hpr       ', hpr(1:nx,1:ny,1:nz), (/ nx, ny, nz /), tstep)
-  call write_3d('Gpvadv    ', Gpvadv(1:nx,1:ny,1:nz), (/ nx, ny, nz /), tstep)
-  call write_3d('Gpvdif    ', Gpvdif(1:nx,1:ny,1:nz), (/ nx, ny, nz /), tstep)
-  call write_3d('Gpvfor    ', Gpvfor(1:nx,1:ny,1:nz), (/ nx, ny, nz /), tstep)
+  !call write_3d('Gpvadv    ', Gpvadv(1:nx,1:ny,1:nz), (/ nx, ny, nz /), tstep)
+  !call write_3d('Gpvdif    ', Gpvdif(1:nx,1:ny,1:nz), (/ nx, ny, nz /), tstep)
+  !call write_3d('Gpvfor    ', Gpvfor(1:nx,1:ny,1:nz), (/ nx, ny, nz /), tstep)
   write(*,*) "================================================================================"
 end subroutine write_snapshot
 
