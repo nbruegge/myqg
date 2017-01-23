@@ -60,7 +60,7 @@ module myqg_module
   real*8, allocatable, dimension(:,:,:)   :: u, v, w
   real*8, allocatable, dimension(:,:,:)   :: b, p
   real*8, allocatable, dimension(:,:,:)   :: psi, pv
-  real*8, allocatable, dimension(:,:,:)   :: pvp, pvr
+  real*8, allocatable, dimension(:,:,:)   :: pvp, pvr, pv_r, pv_s
   real*8, allocatable, dimension(:,:,:)   :: pt
   real*8, allocatable, dimension(:,:,:)   :: hpr
 
@@ -71,7 +71,7 @@ module myqg_module
   real*8, allocatable, dimension(:,:,:)   :: Gpt
   real*8, allocatable, dimension(:,:,:)   :: Gptm1
 
-  real*8, allocatable, dimension(:)       :: rho, gred, Hk
+  real*8, allocatable, dimension(:)       :: rho, gred, Hk, Lr
 
 ! forcing for poisson equation (forc = pv - beta*y)
   real*8, allocatable, dimension(:,:,:)   :: forc 
@@ -113,6 +113,7 @@ subroutine allocate_myqg_module
   allocate( b    (1-ox:nx+ox,1-ox:ny+ox,nz) );                                  b=0
   allocate( psi  (1-ox:nx+ox,1-ox:ny+ox,nz), pv(1-ox:nx+ox,1-ox:ny+ox,nz) );    psi=0; pv=0
   allocate( pvp(1-ox:nx+ox,1-ox:ny+ox,nz), pvr(1-ox:nx+ox,1-ox:ny+ox,nz) );    pvp=0; pvr=0
+  allocate( pv_r(1-ox:nx+ox,1-ox:ny+ox,nz), pv_s(1-ox:nx+ox,1-ox:ny+ox,nz) );    pv_r=0; pv_s=0
   allocate( pt   (1-ox:nx+ox,1-ox:ny+ox,nz) );                                  pt=0
   allocate( hpr  (1-ox:nx+ox,1-ox:ny+ox,nz) );                                  hpr=0
   !allocate( Gpv(1-ox:nx+ox,1-ox:ny+ox,nz), Gpvm1(1-ox:nx+ox,1-ox:ny+ox,nz) ); Gpv=0; Gpvm1=0
@@ -123,7 +124,7 @@ subroutine allocate_myqg_module
   allocate( forc(1-ox:nx+ox,1-ox:ny+ox,nz) );                                   forc=0
   allocate( wek(1-ox:nx+ox,1-ox:ny+ox) );                                       wek=0
 
-  allocate( rho(nz), gred(nz), Hk(nz) );                                        rho=0; gred=0; Hk=0;
+  allocate( rho(nz), gred(nz), Hk(nz), Lr(nz) );                                        rho=0; gred=0; Hk=0; Lr=0;
 
   allocate( matA(3,3,nz,3) );                                        matA=0;
   allocate( matRelx(3,3,nz,3) );                                     matRelx=0;

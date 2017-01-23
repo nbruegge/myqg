@@ -9,11 +9,15 @@ subroutine initialize_setup
   integer :: nt 
   real*8  :: Lb, Lek
   real*8  :: R2, R3
+  real*8  :: H0
   real*8  :: tau0
   real*8  :: Ld  ! only for two layer
 
   character(len=20) :: fmtrea
   character(len=20) :: fmtint
+  character(len=60) :: fmtvec
+  character(len=80) :: fmtstr
+  character(len=50) :: tmpstr
 
   real*8 :: tmpreal
   real*8 :: RES_HOR
@@ -24,7 +28,7 @@ subroutine initialize_setup
   RES_HOR = 1.
   nx = 64*int(RES_HOR)
   ny = 64*int(RES_HOR)
-  nz = 2
+  nz = 3
   !path_data = "/scratch/uni/ifmto/u241161/myqg/test/"
   path_data = "./"
 
@@ -39,36 +43,32 @@ subroutine initialize_setup
   dy  = Ly/ny 
 
   f0     = 0.25e-4
-  beta   = 1.75e-11
+  beta   = 2.0e-11
   rho(1) = 1000.
 
-!  ! three layer example (use nz=3)
-!  Hk(1)   =  250.0
-!  Hk(2)   =  750.0
-!  Hk(3)   = 1000.0
-!  R2      = 40.0e3
-!  R3      = 23.0e3
-!  rho(1)  = 1000.
-!  gred(1) = 10.
-!  gred(2) = (R2*f0)**2 / Hk(2)
-!  gred(3) = (R3*f0)**2 / Hk(3)
-
-! two layer example (use nz=2)
-  Hk(1)   = 1500.
-  Hk(2)   = 1500.
+  ! three layer example (use nz=3)
+  Hk(1)   =  250.0
+  Hk(2)   =  750.0
+  Hk(3)   = 1000.0
+  R2      = 40.0e3
+  R3      = 23.0e3
+  rho(1)  = 1000.
   gred(1) = 10.
-  !gred(2) = 10. 
-  !gred(2) = 0.02 
-  gred(2) = 0.3 
+  gred(2) = (R2*f0)**2 / Hk(2)
+  gred(3) = (R3*f0)**2 / Hk(3)
 
-  ! Rossby radius
-  Ld = ( (gred(2)*Hk(1)*Hk(2)) / ((Hk(1)+Hk(2))*f0**2) )**0.5
+!! two layer example (use nz=2)
+!  Hk(1)   = 400.
+!  Hk(2)   = 400.
+!  gred(1) = 10.
+!  !gred(2) = 10. 
+!  !gred(2) = 0.02 
+!  gred(2) = 0.08 
 
   ! time stepping
-  nt      = 6*500 * int(RES_HOR)
-  !nt      = 1
-  !dt      = 1200.
   dt      = 86400./6. / RES_HOR
+  !dt      = 1200.
+  nt      = int( 100.*86400. /dt )
   tstep   = 0
   t_start = dt * tstep
   time    = t_start
@@ -79,8 +79,17 @@ subroutine initialize_setup
   !diffPVh = dx**2/dt/4.0
   ! beta v = - Ah v_xxx
   ! beta   = Ah / delata**3
-  diffPVh = beta * ( 2*dx )**3
+  !diffPVh = beta * ( 6*dx )**3
+  diffPVh = 100./7.5e3 * dx  
   !diffPVh = 10
+
+  ! Rossby radius
+  H0 = 0
+  do k=1,nz
+    Lr(k) = (gred(k)*Hk(k))**0.5/f0
+    H0 = H0 + Hk(k)
+  enddo
+  Lr(1) = (gred(1)*H0)**0.5/f0
 
   write(*,*) "dx = ", dx, "dy = ", dy
   write(*,*) "gred = ", gred
@@ -106,7 +115,7 @@ subroutine initialize_setup
 
   !tau0 = 0.8
   !Lek  = Lb-dy/2.0
-  tau0 = 0.1
+  tau0 = 0.8
   do j=1-ox,ny+ox
     do i=1-ox,nx+ox
       !wek(i,j) = - pi*tau0/(rho(1)*f0*Lek) * sin(pi*(Lek+yu(j))/Lek)
@@ -171,7 +180,8 @@ subroutine initialize_setup
 
   fmtint="(A,I14,A)"
   fmtrea="(A,ES14.8,A)"
-  !fmtvec="(A,2ES14.8,A)"
+  fmtvec="(9999(ES14.8,A))"
+  fmtstr="(A,A,A)"
   open(20, file="parameter.m", status="unknown")
   write(20,fmtint) "nx = ",nx,";"
   write(20,fmtint) "ny = ",ny,";"
@@ -189,14 +199,14 @@ subroutine initialize_setup
   write(20,fmtrea) "beta    = ",beta,";" 
   write(20,fmtrea) "tau0    = ",tau0,";" 
   write(20,fmtrea) "diffPVh = ",diffPVh,";" 
+  write(20,fmtrea) "delta_munk = ",(diffPVh/beta)**(1./3.),";" 
   write(20,fmtint) ""
-  write(20,fmtrea) "gred_1 = ",gred(1),";" 
-  write(20,fmtrea) "gred_2 = ",gred(2),";" 
-  write(20,fmtrea) "Hk_1   = ",Hk(1),";" 
-  write(20,fmtrea) "Hk_2   = ",Hk(2),";" 
-  write(20,fmtrea) "Ld     = ",Ld,";" 
-  !write(20,"(A,2ES14.8,A)") "gred = ",gred,";" 
-  !write(20,"(A,2ES14.8,A)") "Hk = ",Hk,";" 
+  write(tmpstr,fmtvec) (Hk(k), ", ",k=1,nz)
+  write(20,fmtstr) "Hk     = [",tmpstr,"];"
+  write(tmpstr,fmtvec) (gred(k), ", ",k=1,nz)
+  write(20,fmtstr) "gred   = [",tmpstr,"];"
+  write(tmpstr,fmtvec) (Lr(k), ", ",k=1,nz)
+  write(20,fmtstr) "Ld     = [",tmpstr,"];"
   close(20)
 
 
