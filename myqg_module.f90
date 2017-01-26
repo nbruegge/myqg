@@ -90,6 +90,10 @@ module myqg_module
   real*8 :: f0
   real*8 :: beta
   real*8 :: diffPVh 
+  logical :: use_relative_vorticity=.true.
+  logical :: use_stretching_vorticity=.true.
+  logical :: use_pv_advection=.true.
+  logical :: use_pv_diffusion=.true.
 
 end module myqg_module
 

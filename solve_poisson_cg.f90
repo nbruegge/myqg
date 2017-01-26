@@ -305,7 +305,13 @@ subroutine make_matrix
     !  !matA(2,2,k+1) = matA(2,2,k+1) + f0**2/Hk(k)*(1.0/gred(k+1))
     !endif
   enddo
-  matA = matRelx + matRely + matStr
+  if ( use_relative_vorticity ) then
+    matA = matA + matRelx + matRely
+  endif
+  if ( use_stretching_vorticity ) then
+    matA = matA + matStr
+  endif
+  !matA = matRelx + matRely + matStr
 end subroutine make_matrix
 
 subroutine scalar_prod(is,ie,js,je,nz,p1,p2,sprod)
