@@ -1,0 +1,5 @@
+ca da/all
+
+use pybintocdf.cdf
+
+shade/l=10/k=1 pv_r/pv_s

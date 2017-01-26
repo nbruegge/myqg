@@ -8,7 +8,8 @@ def user_input(par, contlist):
   """
   #par.path_data    = "/scratch/uni/ifmto/u241161/smm/th_smm_47/run_000/"
   #par.contlist_names = ['pv', 'psi', 'u', 'v', 'hpr', 'wek']
-  par.contlist_names = ['pv', 'psi', 'u', 'v', 'hpr', 'pvr', 'pvp', 'Gpvadv', 'Gpvdif', 'Gpvfor']
+  par.contlist_names = ['pv', 'psi', 'pv_r', 'pv_s', 'hpr', 'pvr', 'pvp']
+  #par.contlist_names = ['pv', 'psi', 'u', 'v', 'hpr', 'pvr', 'pvp', 'Gpvadv', 'Gpvdif', 'Gpvfor']
   par.level_by_level = False
   par.myqg = True
   par.mask_land = False
