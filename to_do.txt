@@ -1,0 +1,8 @@
+To do:
+
+- add timing stuff e.g. from pyOM2.0
+- check if model might be particularly slow and why
+- check why model is unstable for Marshall setup (is decreasing the timestep a
+  valid solution?)
+- try to reproduce Munk model by advecting only planetary vorticity
+- add MPI stuff
