@@ -108,9 +108,24 @@ subroutine calc_Gpv
 !INPUT PARAMETERS:  ======================================== 
 !OUTPUT PARAMETERS: ======================================== 
 !LOCAL VARIABLES:   ======================================== 
-  !Gpv = -pv/t_end
-  call calc_pvadv
-  call calc_pvdiff
+  real*8, dimension(nx,ny,nz)  :: Gtmp
+  real*8, dimension(1-ox:nx+ox,1-ox:ny+ox,nz)  :: ttmp
+  if ( use_pv_advection ) then
+    call calc_pvadv
+    !... Tried to call advection routine by passing pv and getting out tendency.
+    !... The idea is, to be able also to advect other tracer or pvp to obtain
+    !... the classical Munk solution. However, this for some reason did not
+    !... work.
+    !ttmp = pv
+    !call calc_advection(ttmp, Gtmp)
+    !Gpvadv = Gtmp
+    Gpv = Gpv + Gtmp
+    !Gpv = Gpv + Gpvadv
+  endif
+  if ( use_pv_diffusion ) then
+    call calc_pvdiff
+  endif
+
   call calc_ekman_pumping
 end subroutine calc_Gpv
 
@@ -143,6 +158,53 @@ subroutine calc_pvdiff
   enddo
   Gpv = Gpv + Gpvdif
 end subroutine calc_pvdiff
+
+subroutine calc_advection(trac, Gtracadv)
+!!!!
+! This routine seems to have a bug, presumably in passing in and output.
+! The old routine calc_pvadv is used instead. This routine should be fine
+! but is not as flexible as this one could be.
+!!!!
+!subroutine calc_advection(trac)
+  use myqg_module
+  implicit none
+!INPUT PARAMETERS:  ======================================== 
+  real*8, dimension(1-ox:nx+ox,1-ox:ny+ox,nz), intent(in)    :: trac
+!OUTPUT PARAMETERS: ======================================== 
+  real*8, dimension(nx,ny,nz), intent(out)   :: Gtracadv
+  !real*8, allocatable, dimension(:,:,:)   :: Gtracadv
+!LOCAL VARIABLES:   ======================================== 
+  !real*8, dimension(1-ox:nx+ox,1-ox:ny+ox,nz)   :: Gtracadv
+  integer :: i,j,k
+  real*8  :: J1, J2, J3
+ 
+  ! Arakawa-Jacobian operator
+  !allocate( Gtracadv(1-ox:nx+ox,1-ox:ny+ox,nz) ); Gtracadv=0.
+  Gtracadv = 0.0
+  do j=1,ny
+    do i=1,nx
+      do k=1,nz
+        J1 = 1.0/(4.0*dx*dy) * ( &
+           &   (psi(i+1,j,k)-psi(i-1,j,k)) * (trac (i,j+1,k)-trac (i,j-1,k)) &
+           & - (psi(i,j+1,k)-psi(i,j-1,k)) * (trac (i+1,j,k)-trac (i-1,j,k)) &
+           & )
+        J2 = 1.0/(4.0*dx*dy) * ( &
+           & + psi(i+1,j,k)*(trac (i+1,j+1,k)-trac (i+1,j-1,k)) - psi(i-1,j,k)*(trac (i-1,j+1,k)-trac (i-1,j-1,k) ) &
+           & - psi(i,j+1,k)*(trac (i+1,j+1,k)-trac (i-1,j+1,k)) + psi(i,j-1,k)*(trac (i+1,j-1,k)-trac (i-1,j-1,k) ) &
+           & )
+        J3 = 1.0/(4.0*dx*dy) * ( &
+           & - trac (i+1,j,k)*(psi(i+1,j+1,k)-psi(i+1,j-1,k)) + trac (i-1,j,k)*(psi(i-1,j+1,k)-psi(i-1,j-1,k) ) &
+           & + trac (i,j+1,k)*(psi(i+1,j+1,k)-psi(i-1,j+1,k)) - trac (i,j-1,k)*(psi(i+1,j-1,k)-psi(i-1,j-1,k) ) &
+           & )
+        Gtracadv(i,j,k) = Gtracadv(i,j,k) - (J1 + J2 + J3) / 3.0
+      enddo
+    enddo
+  enddo
+  !write(*,*) trac(10,10,1), trac(10,10,1) - pv(10,10,1)
+  !write(*,*) psi(10,10,1), pv(10,10,1), Gtracadv(10,10,1)
+  !Gpv = Gpv + Gtracadv
+  !Gpvadv = Gtracadv
+end subroutine calc_advection
   
 subroutine calc_pvadv
   use myqg_module
@@ -175,7 +237,8 @@ subroutine calc_pvadv
       enddo
     enddo
   enddo
-  Gpv = Gpv + Gpvadv
+  !write(*,*) psi(10,10,1), pv(10,10,1), Gpvadv(10,10,1)
+  !Gpv = Gpv + Gpvadv
 end subroutine calc_pvadv
 
 subroutine calc_ekman_pumping
